@@ -124,7 +124,10 @@ local function buildPreviewText(card)
     if card.created_at then
         parts[#parts + 1] = string.format(_("Added on: %s"), os.date("%Y-%m-%d %H:%M", card.created_at))
     end
-    if card.ai_status == DB.STATUS_ERROR and card.ai_error ~= "" then
+    if card.ai_status == DB.STATUS_ENRICHED then
+        parts[#parts + 1] = ""
+        parts[#parts + 1] = _("✨ Enriched by AI")
+    elseif card.ai_status == DB.STATUS_ERROR and card.ai_error ~= "" then
         parts[#parts + 1] = ""
         parts[#parts + 1] = string.format(_("Last AI error: %s"), card.ai_error)
     elseif card.ai_status == DB.STATUS_PENDING then
@@ -642,6 +645,7 @@ local VocabDeckCardList = FocusManager:extend{
     filter_word_type = "",
     filter_source_language = "",
     filter_flagged = false,
+    filter_ai_status = "",  -- "" = all, "enriched" = enriched only, "not_enriched" = not enriched
     reviewable_only = false,
     show_known = false,
     quick_delete = false,
@@ -696,6 +700,11 @@ function VocabDeckCardList:getTitle()
     if self.filter_flagged then
         title = string.format("%s  [%s]", title, _("flagged"))
     end
+    if self.filter_ai_status == "enriched" then
+        title = string.format("%s  [%s]", title, _("enriched"))
+    elseif self.filter_ai_status == "not_enriched" then
+        title = string.format("%s  [%s]", title, _("not enriched"))
+    end
     if not isDefaultSort(self.sort_by, self.sort_dir) then
         title = string.format("%s  [%s, %s]", title,
             SORT_LABELS[self.sort_by] or SORT_LABELS.added,
@@ -711,7 +720,7 @@ function VocabDeckCardList:_recount()
     local book_id = self.filter_book_id or self.book_id
     self.total_items = DB.countCards(book_id, false, self.reviewable_only,
         self.filter_text, now, self.filter_word_type, self.filter_source_language,
-        self.show_known, self.filter_flagged)
+        self.show_known, self.filter_flagged, self.filter_ai_status)
     self.pages = math.ceil(self.total_items / self.items_per_page)
     self.show_page = math.max(1, math.min(math.max(1, self.pages), self.show_page))
 end
@@ -725,7 +734,7 @@ function VocabDeckCardList:_fetchPage()
     return DB.listCardsPage(book_id, false, self.reviewable_only, self.filter_text,
         self.items_per_page, offset, now, self.sort_by, self.sort_dir,
         self.filter_word_type, self.filter_source_language, self.show_known,
-        self.filter_flagged)
+        self.filter_flagged, self.filter_ai_status)
 end
 
 -- Full reload: re-count + fetch page. Used on initial load and filter changes.
@@ -1076,16 +1085,38 @@ function VocabDeckCardList:showFilterDialog()
         end,
     } }
     buttons[#buttons + 1] = { {
+        text = _("AI enrichment"),
+        text_func = function()
+            if self.filter_ai_status == "enriched" then return "✓ " .. _("AI enrichment: enriched") end
+            if self.filter_ai_status == "not_enriched" then return "✓ " .. _("AI enrichment: not enriched") end
+            return _("AI enrichment")
+        end,
+        keep_menu_open = true,
+        callback = function()
+            if self.filter_ai_status == "" then
+                self.filter_ai_status = "enriched"
+            elseif self.filter_ai_status == "enriched" then
+                self.filter_ai_status = "not_enriched"
+            else
+                self.filter_ai_status = ""
+            end
+            self.show_page = 1
+            self:reloadItems()
+        end,
+    } }
+    buttons[#buttons + 1] = { {
         text = _("Clear filters"),
         enabled = (self.filter_word_type or "") ~= ""
             or (self.filter_source_language or "") ~= ""
             or (self.filter_text or "") ~= ""
-            or self.filter_flagged,
+            or self.filter_flagged
+            or (self.filter_ai_status or "") ~= "",
         callback = function()
             self.filter_word_type = ""
             self.filter_source_language = ""
             self.filter_text = ""
             self.filter_flagged = false
+            self.filter_ai_status = ""
             closeDialog()
             self.show_page = 1
             self:reloadItems()

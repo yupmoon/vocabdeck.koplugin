@@ -26,6 +26,12 @@ local function cleanText(text)
     text = text:gsub("^%s+", ""):gsub("%s+$", "")
     text = text:gsub("\r\n", "\n"):gsub("\r", "\n")
     text = text:gsub("\n\n\n+", "\n\n")
+    -- Ensure a blank line between section labels in case the AI omits them.
+    text = text:gsub("(Collocations:)", "\n\n%1")
+    text = text:gsub("(Memory hook:)", "\n\n%1")
+    text = text:gsub("(Example:)", "\n\n%1")
+    -- Collapse any excess blank lines that may have been introduced above.
+    text = text:gsub("\n\n\n+", "\n\n")
     return text
 end
 
@@ -62,11 +68,16 @@ Create a short memory aid with these rules:
 - Include "Example:" with one vivid contrast sentence in the source language that creates an image. Use an opposite or contrasting sense when helpful, such as stupid/clever, loud/quiet, weak/strong, careful/careless.
 - Do not repeat information already covered in the existing notes.
 - Keep section labels exactly as written below, but write the collocations, memory hook, and example content in the source language.
+- Separate each section with a blank line.
 
-Use this exact section order when a section appears:
+Use this exact section order when a section appears (with a blank line between each):
+
 Morphology:
+
 Collocations:
+
 Memory hook:
+
 Example:
 ]], card.phrase or "", source_language ~= "" and source_language or "unknown",
         card.meaning or "", context, target_language, card.user_note or "")
