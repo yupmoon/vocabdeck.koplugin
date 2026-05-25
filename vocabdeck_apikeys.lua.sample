@@ -1,0 +1,32 @@
+-- VocabDeck API keys
+--
+-- Copy this file to `apikeys.lua` in the same folder and replace the
+-- placeholders with your real API keys. Keep `apikeys.lua` private.
+--
+-- Provider defaults, base URLs, models, and custom endpoints belong in
+-- `vocabdeck_configuration.lua`. This file is only for credentials.
+
+return {
+    openai = "",
+    anthropic = "",
+    gemini = "",
+
+    deepseek = "",
+    groq = "",
+    mistral = "",
+    xai = "",
+    openrouter = "",
+    qwen = "",
+    kimi = "",
+    perplexity = "",
+
+    together = "",
+    fireworks = "",
+    sambanova = "",
+    zai = "",
+    cohere = "",
+
+    -- Local providers usually do not need a key.
+    ollama = "",
+    openai_local = "",
+}
