@@ -32,6 +32,12 @@ local function cleanText(text)
     text = text:gsub("(Example:)", "\n\n%1")
     -- Collapse any excess blank lines that may have been introduced above.
     text = text:gsub("\n\n\n+", "\n\n")
+    -- Strip any section label that has no content after it (e.g. "Morphology:\n\n").
+    -- A section label followed by nothing but whitespace/newlines until the next
+    -- label or end-of-string is considered empty and removed entirely.
+    text = text:gsub("(Morphology:|Collocations:|Memory hook:|Example:)%s*\n%s*\n", "")
+    -- Clean up any leading/trailing whitespace left after stripping.
+    text = text:gsub("^%s+", ""):gsub("%s+$", "")
     return text
 end
 
@@ -62,13 +68,14 @@ Answer language: %s
 Existing notes: %s
 
 Create a short memory aid with these rules:
-- If morphology is genuinely useful, include one line starting "Morphology:". Mention useful prefix, suffix, root, compound structure, or word-family clue. If not useful, omit this line completely.
-- Include "Collocations:" with 2-4 natural pairings in the source language.
-- Include "Memory hook:" with one concise mnemonic in the source language, not a paragraph.
-- Include "Example:" with one vivid contrast sentence in the source language that creates an image. Use an opposite or contrasting sense when helpful, such as stupid/clever, loud/quiet, weak/strong, careful/careless.
+- Include "Morphology:" only if the word has a clear, helpful prefix, suffix, root, or compound structure. If not useful, omit this line completely — do not output "Morphology:" with nothing after it.
+- Include "Collocations:" with 2-4 common word pairings in the source language that show how the word is naturally used.
+- Include "Memory hook:" with one short, vivid association — a sound-alike word, a mental image, or a personal connection. Keep it to one sentence.
+- Include "Example:" with one vivid, unusual, or even weird sentence in the source language that creates a strong mental image. Contrast and absurdity are good — reality is optional. Use simple vocabulary when possible.
 - Do not repeat information already covered in the existing notes.
 - Keep section labels exactly as written below, but write the collocations, memory hook, and example content in the source language.
 - Separate each section with a blank line.
+- Keep the tone helpful and direct — like a friend explaining a word, not a dictionary.
 
 Use this exact section order when a section appears (with a blank line between each):
 
