@@ -24,7 +24,7 @@ local Define = require("vocabdeck_define")
 local StudyEntry = require("vocabdeck_study_entry")
 
 local SETTINGS_FILE = DataStorage:getSettingsDir() .. "/vocabdeck.lua"
-local PLUGIN_VERSION = "2.0.0"
+local PLUGIN_VERSION = "1.0.0"
 
 local CONFIGURATION, CONFIG_ERROR = Config.load()
 
