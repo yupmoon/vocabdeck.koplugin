@@ -247,7 +247,7 @@ local function showEditDialog(plugin, card, on_saved)
             word_type = clear_ai and "" or (draft.word_type or ""),
             source_language = draft.source_language or "",
             user_note = draft.user_note or "",
-            ai_status = clear_ai and DB.STATUS_PENDING or (card.ai_status or DB.STATUS_ENRICHED),
+            ai_status = clear_ai and DB.STATUS_PENDING or (card.ai_status or DB.STATUS_PENDING),
             ai_error = "",
         }
         if fields.phrase == "" then
@@ -645,7 +645,7 @@ local VocabDeckCardList = FocusManager:extend{
     filter_word_type = "",
     filter_source_language = "",
     filter_flagged = false,
-    filter_ai_status = "",  -- "" = all, "enriched" = enriched only, "not_enriched" = not enriched
+    filter_ai_status = false,  -- false = all, true = not enriched only
     reviewable_only = false,
     show_known = false,
     quick_delete = false,
@@ -700,9 +700,7 @@ function VocabDeckCardList:getTitle()
     if self.filter_flagged then
         title = string.format("%s  [%s]", title, _("flagged"))
     end
-    if self.filter_ai_status == "enriched" then
-        title = string.format("%s  [%s]", title, _("enriched"))
-    elseif self.filter_ai_status == "not_enriched" then
+    if self.filter_ai_status then
         title = string.format("%s  [%s]", title, _("not enriched"))
     end
     if not isDefaultSort(self.sort_by, self.sort_dir) then
@@ -1085,21 +1083,13 @@ function VocabDeckCardList:showFilterDialog()
         end,
     } }
     buttons[#buttons + 1] = { {
-        text = _("AI enrichment"),
-        text_func = function()
-            if self.filter_ai_status == "enriched" then return "✓ " .. _("AI enrichment: enriched") end
-            if self.filter_ai_status == "not_enriched" then return "✓ " .. _("AI enrichment: not enriched") end
-            return _("AI enrichment")
+        text = _("not ai enriched"),
+        checked_func = function()
+            return self.filter_ai_status and true or false
         end,
         keep_menu_open = true,
         callback = function()
-            if self.filter_ai_status == "" then
-                self.filter_ai_status = "enriched"
-            elseif self.filter_ai_status == "enriched" then
-                self.filter_ai_status = "not_enriched"
-            else
-                self.filter_ai_status = ""
-            end
+            self.filter_ai_status = not self.filter_ai_status
             self.show_page = 1
             self:reloadItems()
         end,
@@ -1110,13 +1100,13 @@ function VocabDeckCardList:showFilterDialog()
             or (self.filter_source_language or "") ~= ""
             or (self.filter_text or "") ~= ""
             or self.filter_flagged
-            or (self.filter_ai_status or "") ~= "",
+            or self.filter_ai_status,
         callback = function()
             self.filter_word_type = ""
             self.filter_source_language = ""
             self.filter_text = ""
             self.filter_flagged = false
-            self.filter_ai_status = ""
+            self.filter_ai_status = false
             closeDialog()
             self.show_page = 1
             self:reloadItems()

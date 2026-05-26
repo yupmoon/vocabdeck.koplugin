@@ -11,6 +11,7 @@ local Importer = require("vocabdeck_import")
 local EditModule = require("vocabdeck_edit")
 local StudyMore = require("vocabdeck_study_more")
 local StudyEntry = require("vocabdeck_study_entry")
+local Updater = require("vocabdeck_updater")
 
 local Menu = {}
 
@@ -115,6 +116,13 @@ function Menu.build(plugin, config_error, plugin_version)
     if #items > 0 then
         items[#items].separator = true
     end
+    items[#items + 1] = {
+        text = _("Check for updates"),
+        keep_menu_open = true,
+        callback = function()
+            Updater.check(plugin, plugin_version)
+        end,
+    }
     items[#items + 1] = {
         text = _("About VocabDeck"),
         keep_menu_open = true,

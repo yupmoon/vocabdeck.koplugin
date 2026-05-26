@@ -206,6 +206,7 @@ end
 function Capture.dictionaryContext(plugin, dict_popup, phrase)
     if not dict_popup then return "", "", "" end
 
+    -- Path A: Highlight path (user selected text then looked it up)
     if dict_popup.highlight and dict_popup.highlight.selected_text then
         return Enrich.captureContexts(plugin, plugin.ui, dict_popup.highlight.selected_text)
     end
@@ -217,6 +218,7 @@ function Capture.dictionaryContext(plugin, dict_popup, phrase)
     local ui = plugin.ui
     local prev_ctx, next_ctx
 
+    -- Strategy 1: Primary — getSelectedWordContext with word_boxes (most accurate)
     if ui and ui.document and ui.document.info and ui.document.info.has_pages
         and ui.document.getSelectedWordContext
         and dict_popup.word_boxes and dict_popup.word_boxes[1] then
@@ -230,6 +232,43 @@ function Capture.dictionaryContext(plugin, dict_popup, phrase)
         if ok then
             prev_ctx = prev
             next_ctx = next_
+        end
+    end
+
+    -- Strategy 2: Fallback — try getSelectedWordContext without word_boxes
+    -- Some document implementations can find the word by text search alone.
+    if not prev_ctx and not next_ctx
+        and ui and ui.document and ui.document.getSelectedWordContext then
+        local ok, prev, next_ = pcall(
+            ui.document.getSelectedWordContext,
+            ui.document,
+            phrase,
+            max_words,
+            nil  -- no word_boxes
+        )
+        if ok then
+            prev_ctx = prev
+            next_ctx = next_
+        end
+    end
+
+    -- Strategy 3: Last resort — extract from current page text
+    -- Less precise but guarantees context when other methods fail.
+    -- Document:getPageText() requires a page number.
+    if not prev_ctx and not next_ctx
+        and ui and ui.document and ui.document.getPageText then
+        local pageno = ui:getCurrentPage()
+        if pageno then
+            local ok, page_text = pcall(ui.document.getPageText, ui.document, pageno)
+            if ok and page_text and page_text ~= "" then
+                local phrase_pos = page_text:find(phrase, 1, true)
+                if phrase_pos then
+                    local before = page_text:sub(1, phrase_pos - 1)
+                    local after = page_text:sub(phrase_pos + #phrase)
+                    prev_ctx = Enrich.trimToWords(before, max_words, true)
+                    next_ctx = Enrich.trimToWords(after, max_words, false)
+                end
+            end
         end
     end
 

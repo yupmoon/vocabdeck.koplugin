@@ -248,7 +248,7 @@ function Add.install(VocabDeck)
             word_type = word_type,
             source_language = self:resolveSourceLanguage{ source_language = source_language },
             dictionary_source_language = source_language,
-            ai_status = meaning ~= "" and DB.STATUS_ENRICHED or DB.STATUS_PENDING,
+            ai_status = DB.STATUS_PENDING,
         }
     end
 

@@ -989,9 +989,7 @@ local function buildCardWhere(book_id, include_enriched_only, reviewable_only, f
     if flagged_only then
         clauses[#clauses + 1] = "(flag <> 0 OR leech <> 0)"
     end
-    if filter_ai_status == "enriched" then
-        clauses[#clauses + 1] = "ai_status = " .. DB.STATUS_ENRICHED
-    elseif filter_ai_status == "not_enriched" then
+    if filter_ai_status then
         clauses[#clauses + 1] = "ai_status <> " .. DB.STATUS_ENRICHED
     end
     if #clauses == 0 then
@@ -1593,7 +1591,7 @@ function DB.applyEnrichment(card_id, result)
             result.word_type or "",
             source_language,
             source_language,
-            result.status or DB.STATUS_ENRICHED,
+            result.status or DB.STATUS_PENDING,
             result.error or "",
             os.time(),
             card_id
@@ -1656,7 +1654,7 @@ function DB.updateCardFields(card_id, fields)
             normalizeSourceLanguage(fields.source_language),
             fields.user_note or "",
             fields.ai_memory_helper or "",
-            fields.ai_status or DB.STATUS_ENRICHED,
+            fields.ai_status or DB.STATUS_PENDING,
             fields.ai_error or "",
             os.time(),
             card_id

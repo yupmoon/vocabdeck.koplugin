@@ -57,6 +57,7 @@ local function trimToWords(text, nb_words, from_end)
     end
     return table.concat(result, " ")
 end
+Enrich.trimToWords = trimToWords
 
 -- prev_ctx / next_ctx come from document:getSelectedWordContext which already
 -- returns requested word counts. We combine them into single strings.
