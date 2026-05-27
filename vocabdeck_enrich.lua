@@ -131,7 +131,9 @@ local function buildMessages(phrase, ai_context, target_language, source_languag
         "If the headword is a single word (e.g. \"ponerse\", \"llamarse\"), provide its IPA.\n" ..
         "  headword      : canonical dictionary form in the source language, not translated. " ..
         "Lemmatize inflected forms when appropriate, e.g. Spanish \"tierna\" -> \"tierno\", \"tenía\" -> \"tener\", " ..
-        "\"se pone\" -> \"ponerse\", \"me llamo\" -> \"llamarse\". " ..
+        "\"haciendo\" -> \"hacer\", \"se pone\" -> \"ponerse\", \"me llamo\" -> \"llamarse\". " ..
+        "For pronominal or possessive components in idioms, normalize to a generic " ..
+        "placeholder, e.g. Spanish \"haciendo de las suyas\" -> \"hacer de algo\". " ..
         "For fixed phrases that are already in their canonical form, keep them as-is.\n" ..
         "  word_type     : part of speech or a short grammatical label, e.g. noun, verb, adjective, phrase. Note: adverbial phrase, noun phrase, verb phrase, adjective phrase, idiom, and similar multi-word constructs should all be labeled simply as \"phrase\".\n" ..
         "  meaning       : one short, plain definition written in %s, ideally under 25 words.\n" ..

@@ -18,36 +18,20 @@ local Menu = {}
 function Menu.build(plugin, config_error, plugin_version)
     local has_book = plugin:getDocumentFilePath() ~= nil
 
-    -- Build study items eagerly so we can decide between direct callback and sub-menu.
+    -- Build flat language items directly in the top-level menu.
     local study_items = StudyEntry.buildStudyMenuItems(plugin)
-    local study_menu_item
-    if #study_items == 1 and study_items[1].callback then
-        -- Single language with due cards: start study directly, no sub-menu.
-        study_menu_item = {
-            text = study_items[1].text,
-            callback = study_items[1].callback,
-        }
-    else
-        -- Multiple languages or no due cards: show sub-menu.
-        study_menu_item = {
-            text = _("Study"),
-            sub_item_table_func = function()
-                return StudyEntry.buildStudyMenuItems(plugin)
-            end,
-        }
+    local items = {}
+    for _, item in ipairs(study_items) do
+        items[#items + 1] = item
     end
-
-    local items = {
-        study_menu_item,
-        {
-            text = _("Study more"),
-            enabled_func = function()
-                return StudyMore.hasAvailableStudyMore(plugin)
-            end,
-            sub_item_table_func = function()
-                return StudyMore.buildMenuItems(plugin)
-            end,
-        },
+    items[#items + 1] = {
+        text = _("Study more"),
+        enabled_func = function()
+            return StudyMore.hasAvailableStudyMore(plugin)
+        end,
+        sub_item_table_func = function()
+            return StudyMore.buildMenuItems(plugin)
+        end,
     }
     items[#items + 1] = {
         text = _("All cards"),

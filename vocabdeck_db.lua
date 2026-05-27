@@ -1068,6 +1068,14 @@ function DB.listSourceLanguages(book_id)
             list[#list + 1] = language
         end
         table.sort(list, function(a, b) return a:lower() < b:lower() end)
+        -- DEBUG: log raw source_language values from DB
+        if rows and rows[1] then
+            local raw_values = {}
+            for i = 1, #rows[1] do
+                raw_values[#raw_values + 1] = tostring(rows[1][i] or "nil")
+            end
+            logger.info("VocabDeck DEBUG listSourceLanguages: raw=", raw_values, "normalized=", list)
+        end
         return list
     end)
 end

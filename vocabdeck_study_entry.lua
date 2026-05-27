@@ -1,7 +1,6 @@
 -- Main-menu Study entry flow.
--- Provides sub-menu items for the TouchMenu (no ButtonDialog overlay).
+-- Provides flat menu items for each source language.
 local _ = require("gettext")
-local InfoMessage = require("ui/widget/infomessage")
 local UIManager = require("ui/uimanager")
 
 local DB = require("vocabdeck_db")
@@ -21,10 +20,8 @@ function StudyEntry.install(VocabDeck)
         UIManager:show(study)
     end
 
-    -- Build sub-menu items for the "Study" TouchMenu entry.
-    -- Returns a table of menu items, one per source language with due count.
-    -- If only one language has due cards, returns a single item that starts
-    -- study immediately (no sub-menu expansion needed).
+    -- Build flat menu items for each source language with due count.
+    -- Languages with zero due cards are included but grayed out (enabled = false).
     function StudyEntry.buildStudyMenuItems(plugin)
         local total = DB.getCardCountForBook(nil)
         if total == 0 then
@@ -34,7 +31,9 @@ function StudyEntry.install(VocabDeck)
             } }
         end
 
-        local languages = DB.listSourceLanguages(nil)
+        -- Use the same filtered query as the "All cards → filter by language" dialog,
+        -- so only languages with active (non-known, non-suspended) cards are shown.
+        local languages = DB.listSourceLanguagesWithCards(nil, false, false, "", os.time(), "", false, false)
         if #languages == 0 then
             return { {
                 text = _("No source languages found. Add or enrich cards first."),
@@ -48,7 +47,6 @@ function StudyEntry.install(VocabDeck)
         local daily_review_limit = tonumber(plugin:readSetting("daily_review_cards_limit", 200)) or 200
 
         local due_counts = {}
-        local first_due_language
         for _, language in ipairs(languages) do
             local ok, counts = pcall(DB.getStudyQueueCounts,
                 nil, language, require_enriched, nil, daily_review_limit, 20 * 60, daily_new_limit, true)
@@ -59,37 +57,28 @@ function StudyEntry.install(VocabDeck)
                     + (tonumber(counts.review) or 0)
             end
             due_counts[language] = due_count
-            if due_count > 0 and not first_due_language then
-                first_due_language = language
-            end
         end
 
-        -- Build items for languages that have due cards.
+        -- Build items for all languages; zero-due languages are grayed out.
         local items = {}
         for _, language in ipairs(languages) do
             local due_count = due_counts[language] or 0
+            local item = {
+                text = string.format("%s [%d]", language, due_count),
+            }
             if due_count > 0 then
-                items[#items + 1] = {
-                    text = string.format("%s [%d]", language, due_count),
-                    callback = function()
-                        startStudy(plugin, language)
-                    end,
-                }
+                item.callback = function()
+                    startStudy(plugin, language)
+                end
+            else
+                item.enabled = false
             end
+            items[#items + 1] = item
         end
         if #items == 0 then
             return { {
                 text = _("No cards due for study."),
                 enabled = false,
-            } }
-        end
-
-        -- Single language with due cards: return a direct callback so
-        -- clicking "Study" goes straight to study mode (no sub-menu).
-        if #items == 1 then
-            return { {
-                text = items[1].text,
-                callback = items[1].callback,
             } }
         end
 
