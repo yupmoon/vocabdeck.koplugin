@@ -389,7 +389,25 @@ local function showEditDialog(plugin, card, on_saved)
     UIManager:show(edit_menu)
 end
 
-local function showCardDetails(plugin, card, on_refresh)
+local function showCardDetails(plugin, card, nav_context, on_refresh)
+    -- Backward compat: old callers pass (plugin, card, on_refresh) with
+    -- only three arguments.  When nav_context is a function it is actually
+    -- the on_refresh callback.  When nav_context is a flat table (the old
+    -- card_list), treat current_index as the 4th arg.
+    if type(nav_context) == "function" then
+        on_refresh = nav_context
+        nav_context = nil
+    end
+    -- Unpack nav_context when provided: { cards, global_idx, total, fetch_at }
+    local page_cards, global_idx, total_items, fetch_at_card
+    if type(nav_context) == "table" and nav_context.fetch_at then
+        page_cards = nav_context.cards
+        global_idx = nav_context.global_idx
+        total_items = nav_context.total
+        fetch_at_card = nav_context.fetch_at
+    end
+    -- card_list and current_index are optional: when provided, prev/next
+    -- navigation buttons appear so the user can browse cards in-place.
     local viewer
     local needs_parent_refresh = false
     local function refreshViewer(saved_card)
@@ -421,7 +439,52 @@ local function showCardDetails(plugin, card, on_refresh)
             on_refresh()
         end
     end
-    local buttons = { {
+    local buttons = {}
+    -- Navigation row: shown when nav_context is provided (cross-page-aware)
+    -- or when backward-compat card_list is passed (within-page only).
+    if nav_context and fetch_at_card and total_items and total_items > 0 then
+        local has_prev = global_idx > 1
+        local has_next = global_idx < total_items
+        local function navigateTo(target_idx)
+            if target_idx < 1 or target_idx > total_items then return end
+            local needs_refresh = needs_parent_refresh
+            closeViewer()
+            -- Try to find the card in the current page first.
+            local local_idx = target_idx - (global_idx - (page_cards and page_cards[1] and 1 or 0))
+            -- Actually, find by computing offset within the current page.
+            -- Simpler: always fetch from DB. It's a single LIMIT 1 query.
+            local next_card = fetch_at_card(target_idx)
+            if next_card then
+                -- Build nav_context for the next card using the same total page cards
+                local next_ctx = {
+                    cards = page_cards,
+                    global_idx = target_idx,
+                    total = total_items,
+                    fetch_at = fetch_at_card,
+                }
+                showCardDetails(plugin, next_card, next_ctx, on_refresh)
+            end
+            if needs_refresh then needs_parent_refresh = true end
+        end
+        local nav_row = {}
+        nav_row[1] = {
+            text = "← " .. _("Previous"),
+            enabled = has_prev,
+            callback = function() navigateTo(global_idx - 1) end,
+        }
+        nav_row[2] = {
+            text = string.format("%d / %d", global_idx, total_items),
+            enabled = false,
+            callback = function() end,
+        }
+        nav_row[3] = {
+            text = _("Next") .. " →",
+            enabled = has_next,
+            callback = function() navigateTo(global_idx + 1) end,
+        }
+        table.insert(buttons, nav_row)
+    end
+    table.insert(buttons, {
         {
             text = _("Edit"),
             callback = function()
@@ -438,7 +501,8 @@ local function showCardDetails(plugin, card, on_refresh)
                 runSingleFetch(plugin, card, refreshViewer)
             end,
         },
-    }, {
+    })
+    table.insert(buttons, {
         {
             text = (card.known or 0) ~= 0 and _("Restore to study") or _("Mark as known"),
             callback = function()
@@ -470,7 +534,8 @@ local function showCardDetails(plugin, card, on_refresh)
                 })
             end,
         },
-    }, {
+    })
+    table.insert(buttons, {
         {
             text = _("Memory"),
             callback = function()
@@ -494,7 +559,7 @@ local function showCardDetails(plugin, card, on_refresh)
                 closeViewer()
             end,
         },
-    } }
+    })
     -- Un-leech button: only shown when the card is actually a leech.
     if (card.leech or 0) ~= 0 then
         table.insert(buttons, { {
@@ -746,6 +811,18 @@ function VocabDeckCardList:loadItems()
     return self:_fetchPage()
 end
 
+-- Fetch a single card at the given global 1-based index using the same
+-- filters, sort order, and book scope as the current card list view.
+function VocabDeckCardList:fetchCardAtGlobalIndex(global_idx)
+    local now = os.time()
+    local book_id = self.filter_book_id or self.book_id
+    local cards = DB.listCardsPage(book_id, false, self.reviewable_only, self.filter_text,
+        1, global_idx - 1, now, self.sort_by, self.sort_dir,
+        self.filter_word_type, self.filter_source_language, self.show_known,
+        self.filter_flagged, self.filter_ai_status)
+    return cards and cards[1] or nil
+end
+
 function VocabDeckCardList:init()
     self.item_table = {}
     self.total_items = 0
@@ -991,7 +1068,13 @@ function VocabDeckCardList:onTap(arg, ges)
     for __, entry in ipairs(self._row_positions) do
         if y >= entry.y_start and y < entry.y_end then
             if entry.card then
-                showCardDetails(self.plugin, entry.card, function()
+                local global_idx = (self.show_page - 1) * self.items_per_page + entry.idx
+                showCardDetails(self.plugin, entry.card, {
+                    cards = self.item_table,
+                    global_idx = global_idx,
+                    total = self.total_items,
+                    fetch_at = function(idx) return self:fetchCardAtGlobalIndex(idx) end,
+                }, function()
                     self:reloadItems()
                 end)
             end
