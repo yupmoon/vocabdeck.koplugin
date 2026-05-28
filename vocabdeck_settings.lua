@@ -419,11 +419,11 @@ local function makeAiContextWordsMenuItem(plugin)
     return {
         text = _("AI context words"),
         text_func = function()
-            return rowValue(_("AI context words"), tonumber(plugin.settings:readSetting("ai_context_words", 30)) or 30)
+            return rowValue(_("AI context words"), tonumber(plugin.settings:readSetting("ai_context_words", 15)) or 15)
         end,
         keep_menu_open = true,
         callback = function(touchmenu_instance)
-            local current = tonumber(plugin.settings:readSetting("ai_context_words", 30)) or 30
+            local current = tonumber(plugin.settings:readSetting("ai_context_words", 15)) or 15
             showNumberInput(
                 _("AI context words"),
                 _("Number of words around the selection that will be sent to the AI as context. 0 = only the selected word or phrase."),

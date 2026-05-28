@@ -102,7 +102,7 @@ function Importer.importForBook(plugin, book_id, book_title)
         return
     end
 
-    local ai_words = tonumber(plugin.settings:readSetting("ai_context_words", 30)) or 30
+    local ai_words = tonumber(plugin.settings:readSetting("ai_context_words", 15)) or 15
     local display_words = tonumber(plugin.settings:readSetting("display_context_words", 15)) or 15
     local source_language = plugin:resolveSourceLanguage()
 

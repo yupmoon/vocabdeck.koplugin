@@ -435,8 +435,7 @@ local function showCardDetails(plugin, card, on_refresh)
         {
             text = card.ai_status == DB.STATUS_ENRICHED and _("Refetch AI data") or _("Fetch AI data"),
             callback = function()
-                closeViewer()
-                runSingleFetch(plugin, card, on_refresh)
+                runSingleFetch(plugin, card, refreshViewer)
             end,
         },
     }, {
@@ -487,6 +486,12 @@ local function showCardDetails(plugin, card, on_refresh)
                 MemoryHelper.showForCard(plugin, card, function(saved_card)
                     refreshViewer(saved_card)
                 end)
+            end,
+        },
+        {
+            text = _("Close"),
+            callback = function()
+                closeViewer()
             end,
         },
     } }

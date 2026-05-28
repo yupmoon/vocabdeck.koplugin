@@ -130,26 +130,33 @@ local function buildMessages(phrase, ai_context, target_language, source_languag
         "If the headword is a fixed multi-word phrase (e.g. \"por supuesto\", \"a priori\"), return empty string. " ..
         "If the headword is a single word (e.g. \"ponerse\", \"llamarse\"), provide its IPA.\n" ..
         "  headword      : canonical dictionary form in the source language, not translated. " ..
-        "Lemmatize inflected forms when appropriate, e.g. Spanish \"tierna\" -> \"tierno\", \"tenía\" -> \"tener\", " ..
+        "For single words, ALWAYS lemmatize to the dictionary (lemma) form, e.g. Spanish \"tierna\" -> \"tierno\", \"tenía\" -> \"tener\", " ..
         "\"haciendo\" -> \"hacer\", \"se pone\" -> \"ponerse\", \"me llamo\" -> \"llamarse\". " ..
+        "For multi-word phrases, return the canonical dictionary entry form. " ..
         "For pronominal or possessive components in idioms, normalize to a generic " ..
         "placeholder, e.g. Spanish \"haciendo de las suyas\" -> \"hacer de algo\". " ..
         "For fixed phrases that are already in their canonical form, keep them as-is.\n" ..
         "  word_type     : part of speech or a short grammatical label, e.g. noun, verb, adjective, phrase. Note: adverbial phrase, noun phrase, verb phrase, adjective phrase, idiom, and similar multi-word constructs should all be labeled simply as \"phrase\".\n" ..
         "  meaning       : one short, plain definition written in %s, ideally under 25 words.\n" ..
         "  synonym       : one to three useful synonyms or near-synonyms in the source language of the word or phrase, comma-separated; empty string if none are useful.\n" ..
-        "  source_language: the source language of the word or phrase, written as an English language name, e.g. Spanish, Japanese, German.\n" ..
-        "Use the provided context only to disambiguate senses. Do not add labels, markdown, or commentary.",
+        "  source_language: the source language of the word or phrase, written as an English language name, e.g. Spanish, Japanese, German. " ..
+        "If Known source language is not provided in the user message, you MUST detect it from the surrounding context. " ..
+        "Do not assume English.\n" ..
+        "Use the provided context to determine the correct meaning and source_language. " ..
+        "Pay attention to how the word is used in context to select the most accurate sense. " ..
+        "Do not add labels, markdown, or commentary.",
         target_language
     )
 
     local user_parts = { "Word or phrase: \"" .. phrase .. "\"" }
     if source_language and source_language ~= "" then
         user_parts[#user_parts + 1] = "Known source language: " .. source_language
+    else
+        user_parts[#user_parts + 1] = "Important: detect the source language from the context. Do not assume English."
     end
-    if ai_context and ai_context ~= "" and ai_context ~= phrase then
-        user_parts[#user_parts + 1] = "Context:\n" .. ai_context
-    end
+    local context_text = (ai_context and ai_context ~= "" and ai_context ~= phrase)
+        and ai_context or "(no context available)"
+    user_parts[#user_parts + 1] = "Context: " .. context_text
     user_parts[#user_parts + 1] = "Return JSON only."
     local user_prompt = table.concat(user_parts, "\n\n")
 
@@ -247,7 +254,14 @@ function Enrich.enrichCard(plugin, card, trap_widget)
         return nil, parse_err or _("Could not parse AI response.")
     end
     if card.source_language and card.source_language ~= "" then
-        result.source_language = card.source_language
+        -- Prefer the card's known language, but only when the AI agrees
+        -- or could not determine one.  If the AI detected a different
+        -- language from the surrounding context, trust the AI — the
+        -- document metadata may be wrong (e.g. a Spanish text in a book
+        -- tagged as English).
+        if result.source_language == "" or result.source_language == card.source_language then
+            result.source_language = card.source_language
+        end
     end
     result.status = DB.STATUS_ENRICHED
     result.error = ""
@@ -268,6 +282,9 @@ function Enrich.enrichAndSave(plugin, card, trap_widget)
     end
     DB.applyEnrichment(card.id, result)
     -- reflect on the in-memory card too
+    if result.headword and result.headword ~= "" then
+        card.phrase = result.headword
+    end
     card.pronunciation = result.pronunciation
     card.meaning = result.meaning
     card.synonym = result.synonym
@@ -445,7 +462,7 @@ function Enrich.captureContexts(plugin, ui, selected_text_obj)
     end
     local phrase = selected_text_obj.text
     local settings = plugin.settings
-    local ai_words = tonumber(settings:readSetting("ai_context_words", 30)) or 30
+    local ai_words = tonumber(settings:readSetting("ai_context_words", 15)) or 15
     local display_words = tonumber(settings:readSetting("display_context_words", 15)) or 15
     local max_words = math.max(ai_words, display_words, 10)
 

@@ -212,7 +212,7 @@ function Capture.dictionaryContext(plugin, dict_popup, phrase)
     end
 
     local settings = plugin.settings
-    local ai_words = tonumber(settings:readSetting("ai_context_words", 30)) or 30
+    local ai_words = tonumber(settings:readSetting("ai_context_words", 15)) or 15
     local display_words = tonumber(settings:readSetting("display_context_words", 15)) or 15
     local max_words = math.max(ai_words, display_words, 10)
     local ui = plugin.ui
