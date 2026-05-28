@@ -474,7 +474,7 @@ local function showCardDetails(plugin, card, nav_context, on_refresh)
         }
         nav_row[2] = {
             text = string.format("%d / %d", global_idx, total_items),
-            enabled = false,
+            
             callback = function() end,
         }
         nav_row[3] = {
