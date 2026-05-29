@@ -163,6 +163,8 @@ local function buildMessages(phrase, ai_context, target_language, source_languag
         "e.g. \"el coche\" -> \"coche\", \"las casas\" -> \"casas\", " ..
         "\"el alumbrado de carretera\" -> \"alumbrado de carretera\", " ..
         "\"la maison\" -> \"maison\", \"les fleurs\" -> \"fleurs\".\n" ..
+        "In Spanish, expand the contraction \"del\" (de + el) to \"de\" " ..
+        "in the headword. e.g. \"a peticion del\" -> \"a petición de\".\n" ..
         "For single words, ALWAYS lemmatize to the dictionary (lemma) form, e.g. Spanish \"tierna\" -> \"tierno\", \"tenía\" -> \"tener\", " ..
         "\"haciendo\" -> \"hacer\", \"se pone\" -> \"ponerse\", \"me llamo\" -> \"llamarse\", " ..
         "\"se aprecie\" -> \"apreciarse\", \"te vas\" -> \"irse\", \"se siente\" -> \"sentirse\". " ..
