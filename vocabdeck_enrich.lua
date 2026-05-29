@@ -136,6 +136,11 @@ local function buildMessages(phrase, ai_context, target_language, source_languag
         "For pronominal or possessive components in idioms, normalize to a generic " ..
         "placeholder, e.g. Spanish \"haciendo de las suyas\" -> \"hacer de algo\". " ..
         "For fixed phrases that are already in their canonical form, keep them as-is.\n" ..
+        "  headword MUST be lowercase (e.g. \"estado anímico\", \"coche\", \"ponerse\"). " ..
+        "Do NOT copy the input's capitalization. Only use capital letters for words that are " ..
+        "ALWAYS capitalized in dictionary entries: proper nouns (España, iPhone, macOS), " ..
+        "language names (English, Spanish), and acronyms (NASA, PDF). " ..
+        "A sentence-start capital letter in the input does NOT make a word a proper noun.\n" ..
         "  word_type     : part of speech or a short grammatical label, e.g. noun, verb, adjective, phrase. Note: adverbial phrase, noun phrase, verb phrase, adjective phrase, idiom, and similar multi-word constructs should all be labeled simply as \"phrase\".\n" ..
         "  meaning       : one short, plain definition written in %s, ideally under 25 words.\n" ..
         "  synonym       : one to three useful synonyms or near-synonyms in the source language of the word or phrase, comma-separated; empty string if none are useful.\n" ..

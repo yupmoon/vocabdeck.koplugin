@@ -262,6 +262,17 @@ function Capture.dictionaryContext(plugin, dict_popup, phrase)
             local ok, page_text = pcall(ui.document.getPageText, ui.document, pageno)
             if ok and page_text and page_text ~= "" then
                 local phrase_pos = page_text:find(phrase, 1, true)
+                -- Case-insensitive fallback: the dictionary headword may
+                -- differ from the page text in casing or accents.
+                if not phrase_pos then
+                    phrase_pos = page_text:lower():find(phrase:lower(), 1, true)
+                end
+                -- For multi-word phrases, try matching just the first word
+                -- when the full phrase can't be found (e.g. spans a line break).
+                if not phrase_pos and phrase:find(" ") then
+                    local first_word = phrase:match("^(%S+)")
+                    phrase_pos = page_text:lower():find(first_word:lower(), 1, true)
+                end
                 if phrase_pos then
                     local before = page_text:sub(1, phrase_pos - 1)
                     local after = page_text:sub(phrase_pos + #phrase)
