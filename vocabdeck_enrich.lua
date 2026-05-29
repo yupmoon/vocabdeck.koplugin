@@ -120,6 +120,33 @@ end
 
 -- ── Prompt construction & JSON parsing ────────────────────────────────────
 
+-- Strip Romance-language definite articles from the start of a phrase.
+-- This is done in code so the AI never sees the article and can't be
+-- inconsistent about dropping it.  Handles Spanish, French, Italian,
+-- Portuguese, and Catalan.
+local function stripLeadingArticles(phrase)
+    if not phrase or phrase == "" then return "" end
+    -- Case-insensitive patterns: el, la, los, las, le, la, les, l', il, lo,
+    -- i, gli, o, a, os, as.  Only match when followed by a space.
+    local stripped = phrase:gsub("^[Ee][Ll]%s+", "")
+    stripped = stripped:gsub("^[Ll][Aa]%s+", "")
+    stripped = stripped:gsub("^[Ll][Oo][Ss]%s+", "")
+    stripped = stripped:gsub("^[Ll][Aa][Ss]%s+", "")
+    stripped = stripped:gsub("^[Ll][Ee]%s+", "")
+    stripped = stripped:gsub("^[Ll][Ee][Ss]%s+", "")
+    stripped = stripped:gsub("^[Ll]'%s*", "")
+    stripped = stripped:gsub("^[Ii][Ll]%s+", "")
+    stripped = stripped:gsub("^[Ll][Oo]%s+", "")
+    stripped = stripped:gsub("^[Ii]%s+", "")
+    stripped = stripped:gsub("^[Gg][Ll][Ii]%s+", "")
+    stripped = stripped:gsub("^[Oo]%s+", "")
+    stripped = stripped:gsub("^[Aa]%s+", "")
+    stripped = stripped:gsub("^[Oo][Ss]%s+", "")
+    stripped = stripped:gsub("^[Aa][Ss]%s+", "")
+    return stripped
+end
+Enrich.stripLeadingArticles = stripLeadingArticles
+
 local function buildMessages(phrase, ai_context, target_language, source_language)
     target_language = target_language or "English"
 
@@ -129,10 +156,17 @@ local function buildMessages(phrase, ai_context, target_language, source_languag
         "  pronunciation : IPA phonetic transcription of the headword (the value of the headword key). " ..
         "If the headword is a fixed multi-word phrase (e.g. \"por supuesto\", \"a priori\"), return empty string. " ..
         "If the headword is a single word (e.g. \"ponerse\", \"llamarse\"), provide its IPA.\n" ..
-        "  headword      : canonical dictionary form in the source language, not translated. " ..
+        "  headword      : the core lexical entry — as it appears in a dictionary " ..
+        "WITHOUT any article. Spanish/French/Italian/Portuguese/Catalan noun entries " ..
+        "do NOT include definite articles (el, la, los, las, le, les, il, lo, i, gli, " ..
+        "o, a, os, as, l'). ALWAYS strip these from the headword. " ..
+        "e.g. \"el coche\" -> \"coche\", \"las casas\" -> \"casas\", " ..
+        "\"el alumbrado de carretera\" -> \"alumbrado de carretera\", " ..
+        "\"la maison\" -> \"maison\", \"les fleurs\" -> \"fleurs\".\n" ..
         "For single words, ALWAYS lemmatize to the dictionary (lemma) form, e.g. Spanish \"tierna\" -> \"tierno\", \"tenía\" -> \"tener\", " ..
-        "\"haciendo\" -> \"hacer\", \"se pone\" -> \"ponerse\", \"me llamo\" -> \"llamarse\". " ..
-        "For multi-word phrases, return the canonical dictionary entry form. " ..
+        "\"haciendo\" -> \"hacer\", \"se pone\" -> \"ponerse\", \"me llamo\" -> \"llamarse\", " ..
+        "\"se aprecie\" -> \"apreciarse\", \"te vas\" -> \"irse\", \"se siente\" -> \"sentirse\". " ..
+        "For multi-word phrases, return the canonical form WITHOUT any article. " ..
         "For pronominal or possessive components in idioms, normalize to a generic " ..
         "placeholder, e.g. Spanish \"haciendo de las suyas\" -> \"hacer de algo\". " ..
         "For fixed phrases that are already in their canonical form, keep them as-is.\n" ..

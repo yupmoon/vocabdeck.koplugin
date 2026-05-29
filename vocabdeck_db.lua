@@ -1576,15 +1576,12 @@ function DB.applyEnrichment(card_id, result)
                 else
                     duplicate_stmt:bind(headword, book_id, card_id)
                 end
-                local duplicate_rows = duplicate_stmt:resultset("hik")
+                duplicate_stmt:resultset("hik")
                 duplicate_stmt:close()
-                local duplicate = duplicate_rows and duplicate_rows[1] and duplicate_rows[1][1] ~= nil
-                if not duplicate then
-                    local phrase_stmt = conn:prepare("UPDATE cards SET phrase = ?, normalized_phrase = ? WHERE id = ?;")
-                    phrase_stmt:bind(headword_value, normalizePhrase(headword_value), card_id)
-                    phrase_stmt:step()
-                    phrase_stmt:close()
-                end
+                local phrase_stmt = conn:prepare("UPDATE cards SET phrase = ?, normalized_phrase = ? WHERE id = ?;")
+                phrase_stmt:bind(headword_value, normalizePhrase(headword_value), card_id)
+                phrase_stmt:step()
+                phrase_stmt:close()
             end
         end
         local stmt = conn:prepare([[UPDATE cards SET

@@ -159,15 +159,23 @@ function VocabDeck:onReaderReady()
     if self.ui.highlight and self.ui.highlight.addToHighlightDialog then
         self.ui.highlight:addToHighlightDialog("vocabdeck_add", function(reader_highlight)
             return {
-                text = _("Add to VocabDeck"),
+                text = _("Add to VD"),
                 callback = function()
                     self:addFromHighlight(reader_highlight)
                 end,
             }
         end)
+        self.ui.highlight:addToHighlightDialog("vocabdeck_add_ai", function(reader_highlight)
+            return {
+                text = _("Add to VD (Enriched)"),
+                callback = function()
+                    self:addWithAIFromHighlight(reader_highlight)
+                end,
+            }
+        end)
         self.ui.highlight:addToHighlightDialog("vocabdeck_define", function(reader_highlight)
             return {
-                text = _("Define (VocabDeck)"),
+                text = _("Define (VD)"),
                 callback = function()
                     self:defineFromHighlight(reader_highlight)
                 end,
@@ -185,15 +193,22 @@ function VocabDeck:onDictButtonsReady(dict_popup, dict_buttons)
     local row = {
         {
             id = "vocabdeck_add",
-            text = _("Add to VocabDeck"),
+            text = _("Add to VD"),
             font_bold = true,
             callback = function()
                 self:addFromDictionary(dict_popup)
             end,
         },
         {
+            id = "vocabdeck_add_ai",
+            text = _("VD +AI"),
+            callback = function()
+                self:addWithAIFromDictionary(dict_popup)
+            end,
+        },
+        {
             id = "vocabdeck_define",
-            text = _("Define (VocabDeck)"),
+            text = _("Define (VD)"),
             callback = function()
                 self:defineFromDictionary(dict_popup)
             end,

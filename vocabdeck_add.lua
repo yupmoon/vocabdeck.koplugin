@@ -10,6 +10,7 @@ local DB = require("vocabdeck_db")
 local Capture = require("vocabdeck_capture")
 local Enrich = require("vocabdeck_enrich")
 local ManualAdd = require("vocabdeck_manual_add")
+local AIRunner = require("vocabdeck_ai_runner")
 
 local Add = {}
 
@@ -225,6 +226,49 @@ function Add.install(VocabDeck)
 
     function VocabDeck:addManualCard(touchmenu_instance)
         ManualAdd.start(self, touchmenu_instance)
+    end
+
+    -- Enrich first, then auto-save — same pattern as Define (VD) but silent.
+    function VocabDeck:_defineAndAutoSave(params)
+        if not params or not params.phrase or params.phrase == "" then return end
+        AIRunner.run(self, {
+            message = _("Enriching:\n%s"),
+            phrase = params.phrase,
+            work = function(trap)
+                local anchored = Capture.anchorInfoMessageBottomLeft(trap)
+                return Enrich.enrichCard(self, {
+                    phrase = params.phrase,
+                    ai_context = params.ai_context or "",
+                    source_language = params.source_language or "",
+                }, anchored)
+            end,
+            on_error = function(err)
+                UIManager:show(InfoMessage:new{
+                    text = string.format(_("Enrichment failed:\n%s"), err or _("Unknown error")),
+                    timeout = 3,
+                })
+            end,
+            on_success = function(result)
+                self:_applyDefineResult(params, result)
+                self:_persistCard(params.phrase, "", params)
+            end,
+        })
+    end
+
+    function VocabDeck:addWithAIFromHighlight(reader_highlight)
+        local params = self:_buildHighlightCardParams(reader_highlight)
+        if not params then return end
+        self:_closeHighlightDialog(reader_highlight)
+        self:_defineAndAutoSave(params)
+    end
+
+    function VocabDeck:addWithAIFromDictionary(dict_popup)
+        local params = self:_buildDictionaryCardParams(dict_popup)
+        if not params then return end
+        if dict_popup and dict_popup.onClose then
+            UIManager:close(dict_popup)
+        end
+        self:_defineAndAutoSave(params)
     end
 
     function VocabDeck:_buildDictionaryCardParams(dict_popup)

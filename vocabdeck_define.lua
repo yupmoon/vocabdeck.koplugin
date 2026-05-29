@@ -40,11 +40,8 @@ function Define.install(VocabDeck)
         UIManager:show(viewer)
     end
 
-    function VocabDeck:_showDefineResult(params, result)
+    function VocabDeck:_applyDefineResult(params, result)
         local headword = Capture.cleanText(result.headword or "")
-        -- Always use the AI-lemmatized headword when provided.  The AI decides
-        -- the canonical form — "se pone" → "ponerse", "tierna" → "tierno" —
-        -- regardless of whether the original input was a single word or a phrase.
         if headword ~= "" then
             params.phrase = headword
         end
@@ -58,10 +55,6 @@ function Define.install(VocabDeck)
                 dictionary_source_language = params.dictionary_source_language,
             }
         end
-        -- Let the AI decide whether the headword is a phrase after lemmatization.
-        -- Only override when the final headword (after replacement) is a multi-word
-        -- phrase.  This way inflected forms like "se pone" -> "ponerse" keep their
-        -- pronunciation, while true fixed phrases like "por supuesto" do not.
         if Capture.isPhrase(params.phrase) then
             params.pronunciation = ""
             if params.word_type == "" then
@@ -70,6 +63,10 @@ function Define.install(VocabDeck)
         end
         params.ai_status = DB.STATUS_ENRICHED
         params.allow_update_existing = true
+    end
+
+    function VocabDeck:_showDefineResult(params, result)
+        self:_applyDefineResult(params, result)
 
         local header = params.phrase or ""
         local meta = {}
