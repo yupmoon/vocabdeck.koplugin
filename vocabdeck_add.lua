@@ -268,6 +268,9 @@ function Add.install(VocabDeck)
         if dict_popup and dict_popup.onClose then
             UIManager:close(dict_popup)
         end
+        if dict_popup and dict_popup.highlight and dict_popup.highlight.clear then
+            dict_popup.highlight:clear()
+        end
         self:_defineAndAutoSave(params)
     end
 
