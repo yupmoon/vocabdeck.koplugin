@@ -1546,6 +1546,42 @@ function DB.updateCardSourceLanguage(card_id, source_language)
     end)
 end
 
+-- Return the book_id for a card, or nil.
+function DB.getCardBookId(card_id)
+    if not card_id then return nil end
+    DB.init()
+    return withConnection(function(conn)
+        local stmt = conn:prepare("SELECT book_id FROM cards WHERE id = ?;")
+        stmt:bind(card_id)
+        local rows = stmt:resultset("hik")
+        stmt:close()
+        return rows and rows[1] and rows[1][1]
+    end)
+end
+
+-- Check whether a card with the given headword already exists in the same
+-- book (and optionally the same source language), excluding `exclude_id`.
+-- Returns the duplicate card id, or nil.
+function DB.findDuplicateByHeadword(book_id, headword, source_language, exclude_id)
+    if not book_id or not headword or headword == "" then return nil end
+    DB.init()
+    return withConnection(function(conn)
+        local normalized = normalizePhrase(headword)
+        local lang_filter = sourceLanguageFilterSql(source_language)
+        local sql
+        if lang_filter ~= "" then
+            sql = "SELECT id FROM cards WHERE normalized_phrase = ? AND book_id = ?" .. lang_filter .. " AND id <> ? LIMIT 1;"
+        else
+            sql = "SELECT id FROM cards WHERE normalized_phrase = ? AND book_id = ? AND id <> ? LIMIT 1;"
+        end
+        local stmt = conn:prepare(sql)
+        stmt:bind(normalized, book_id, exclude_id or 0)
+        local rows = stmt:resultset("hik")
+        stmt:close()
+        return rows and rows[1] and rows[1][1]
+    end)
+end
+
 -- Apply AI enrichment result to a card.
 -- result: {headword?, pronunciation, meaning, synonym, word_type, source_language?, status, error}
 function DB.applyEnrichment(card_id, result)
@@ -1576,12 +1612,14 @@ function DB.applyEnrichment(card_id, result)
                 else
                     duplicate_stmt:bind(headword, book_id, card_id)
                 end
-                duplicate_stmt:resultset("hik")
+                local duplicate_rows = duplicate_stmt:resultset("hik")
                 duplicate_stmt:close()
-                local phrase_stmt = conn:prepare("UPDATE cards SET phrase = ?, normalized_phrase = ? WHERE id = ?;")
-                phrase_stmt:bind(headword_value, normalizePhrase(headword_value), card_id)
-                phrase_stmt:step()
-                phrase_stmt:close()
+                if not duplicate_rows or not duplicate_rows[1] then
+                    local phrase_stmt = conn:prepare("UPDATE cards SET phrase = ?, normalized_phrase = ? WHERE id = ?;")
+                    phrase_stmt:bind(headword_value, normalizePhrase(headword_value), card_id)
+                    phrase_stmt:step()
+                    phrase_stmt:close()
+                end
             end
         end
         local stmt = conn:prepare([[UPDATE cards SET
@@ -1610,6 +1648,92 @@ function DB.applyEnrichment(card_id, result)
             book_stmt:step()
             book_stmt:close()
         end
+        DB.invalidateSummaryCache()
+        return true
+    end)
+end
+
+-- Merge source card into target card, then delete source.
+-- If target has no AI data and ai_result is provided, apply AI data to target.
+-- Otherwise copy only non-AI fields that target is missing.
+-- ai_result: {headword, pronunciation, meaning, synonym, word_type, source_language, status, error} or nil
+function DB.mergeCards(source_id, target_id, ai_result)
+    if not source_id or not target_id then return false end
+    DB.init()
+    return withConnection(function(conn)
+        -- Fetch both cards
+        local function fetchCard(id)
+            local stmt = conn:prepare([[SELECT phrase, user_note, display_context, sentence, ai_context,
+                meaning, synonym, pronunciation, word_type, source_language, ai_status
+                FROM cards WHERE id = ?;]])
+            stmt:bind(id)
+            local rows = stmt:resultset("hik")
+            stmt:close()
+            return rows and rows[1]
+        end
+        local source = fetchCard(source_id)
+        local target = fetchCard(target_id)
+        if not source or not target then return false end
+
+        local target_has_ai = target[6] and target[6] ~= ""  -- meaning non-empty
+        local updates = {}
+        local params = {}
+
+        -- Apply AI data only if target doesn't have it yet
+        if ai_result and not target_has_ai then
+            updates[#updates + 1] = "phrase = ?"
+            params[#params + 1] = ai_result.headword or source[1]
+            updates[#updates + 1] = "normalized_phrase = ?"
+            params[#params + 1] = normalizePhrase(ai_result.headword or source[1])
+            updates[#updates + 1] = "pronunciation = ?"
+            params[#params + 1] = ai_result.pronunciation or ""
+            updates[#updates + 1] = "meaning = ?"
+            params[#params + 1] = ai_result.meaning or ""
+            updates[#updates + 1] = "synonym = ?"
+            params[#params + 1] = ai_result.synonym or ""
+            updates[#updates + 1] = "word_type = ?"
+            params[#params + 1] = ai_result.word_type or ""
+            if (ai_result.source_language or "") ~= "" then
+                updates[#updates + 1] = "source_language = ?"
+                params[#params + 1] = ai_result.source_language
+            end
+            updates[#updates + 1] = "ai_status = ?"
+            params[#params + 1] = DB.STATUS_ENRICHED
+        end
+
+        -- Copy non-AI fields from source if target is missing them
+        local field_map = {
+            { idx = 2, col = "user_note" },
+            { idx = 3, col = "display_context" },
+            { idx = 4, col = "sentence" },
+            { idx = 5, col = "ai_context" },
+        }
+        for _, f in ipairs(field_map) do
+            local src_val = source[f.idx] or ""
+            local tgt_val = target[f.idx] or ""
+            if src_val ~= "" and tgt_val == "" then
+                updates[#updates + 1] = f.col .. " = ?"
+                params[#params + 1] = src_val
+            end
+        end
+
+        if #updates > 0 then
+            updates[#updates + 1] = "updated_at = ?"
+            params[#params + 1] = os.time()
+            local sql = "UPDATE cards SET " .. table.concat(updates, ", ") .. " WHERE id = ?;"
+            params[#params + 1] = target_id
+            local stmt = conn:prepare(sql)
+            stmt:bind(table.unpack(params))
+            stmt:step()
+            stmt:close()
+        end
+
+        -- Delete source
+        local del_stmt = conn:prepare("DELETE FROM cards WHERE id = ?;")
+        del_stmt:bind(source_id)
+        del_stmt:step()
+        del_stmt:close()
+
         DB.invalidateSummaryCache()
         return true
     end)

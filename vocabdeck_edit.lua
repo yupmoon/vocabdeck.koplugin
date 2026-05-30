@@ -170,17 +170,70 @@ local function askPostEditAction(plugin, card, on_done)
 end
 
 local function runSingleFetch(plugin, card, after)
+    local handled_in_dialog = false
     AIRunner.run(plugin, {
         message = _("Fetching AI data for:\n%s"),
         phrase = card.phrase or "",
         work = function(trap)
-            return Enrich.enrichAndSave(plugin, card, trap)
+            return Enrich.enrichCard(plugin, card, trap)
         end,
-        on_success = function()
+        on_success = function(result)
+            local headword = result.headword or ""
+            local book_id = DB.getCardBookId(card.id)
+            if book_id and headword ~= "" and headword ~= card.phrase then
+                local dup_id = DB.findDuplicateByHeadword(book_id, headword, result.source_language, card.id)
+                if dup_id then
+                    handled_in_dialog = true
+                    local dialog
+                    local function closeDialog()
+                        if dialog then UIManager:close(dialog) end
+                    end
+                    dialog = ButtonDialog:new{
+                        title = string.format(_("\"%s\" already exists in this book."), headword),
+                        buttons = { {
+                            {
+                                text = _("Delete"),
+                                callback = function()
+                                    closeDialog()
+                                    DB.deleteCard(card.id)
+                                    UIManager:show(InfoMessage:new{ text = _("Card deleted."), timeout = 2 })
+                                    if after then after() end
+                                end,
+                            },
+                            {
+                                text = _("Merge into existing"),
+                                callback = function()
+                                    closeDialog()
+                                    DB.mergeCards(card.id, dup_id, result)
+                                    UIManager:show(InfoMessage:new{
+                                        text = string.format(_("Merged with %s."), headword),
+                                        timeout = 2,
+                                    })
+                                    if after then after() end
+                                end,
+                            },
+                        } },
+                    }
+                    UIManager:show(dialog)
+                    return
+                end
+            end
+            -- No duplicate: apply enrichment and mirror to in-memory card
+            DB.applyEnrichment(card.id, result)
+            if result.headword and result.headword ~= "" then
+                card.phrase = result.headword
+            end
+            card.pronunciation = result.pronunciation or ""
+            card.meaning = result.meaning or ""
+            card.synonym = result.synonym or ""
+            card.word_type = result.word_type or ""
+            card.source_language = result.source_language ~= "" and result.source_language or card.source_language
+            card.ai_status = DB.STATUS_ENRICHED
+            card.ai_error = ""
             UIManager:show(InfoMessage:new{ text = _("Card enriched."), timeout = 2 })
         end,
         on_finally = function()
-            if after then after() end
+            if not handled_in_dialog and after then after() end
         end,
     })
 end
