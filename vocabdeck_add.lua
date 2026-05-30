@@ -233,7 +233,7 @@ function Add.install(VocabDeck)
     function VocabDeck:_defineAndAutoSave(params)
         if not params or not params.phrase or params.phrase == "" then return end
         AIRunner.run(self, {
-            message = _("Enriching:\n%s"),
+            message = _("Enriching... Tap outside to cancel."),
             phrase = params.phrase,
             work = function(trap)
                 local anchored = Capture.anchorInfoMessageBottomLeft(trap)

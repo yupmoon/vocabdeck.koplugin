@@ -74,8 +74,9 @@ function AIRunner.run(plugin, opts)
                 trap_text = string.format(opts.message or "", opts.phrase)
             end
             local trap = InfoMessage:new{
-                text = string.format("%s\n\n%s", trap_text, _("Tap outside to cancel.")),
+                text = trap_text,
                 timeout = nil,
+                show_icon = false,
             }
             trap.dismiss_callback = function()
                 cancelled = true

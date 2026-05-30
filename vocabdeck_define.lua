@@ -116,7 +116,7 @@ function Define.install(VocabDeck)
             return
         end
         AIRunner.run(self, {
-            message = _("Defining:\n%s"),
+            message = _("Defining... Tap outside to cancel."),
             phrase = params.phrase,
             work = function(trap)
                 local anchored = Capture.anchorInfoMessageBottomLeft(trap)
