@@ -5,6 +5,7 @@ local InfoMessage = require("ui/widget/infomessage")
 local InputDialog = require("ui/widget/inputdialog")
 local Notification = require("ui/widget/notification")
 local UIManager = require("ui/uimanager")
+local logger = require("logger")
 
 local DB = require("vocabdeck_db")
 local Capture = require("vocabdeck_capture")
@@ -239,7 +240,7 @@ function Add.install(VocabDeck)
                 return Enrich.enrichCard(self, {
                     phrase = params.phrase,
                     ai_context = params.ai_context or "",
-                    source_language = params.source_language or "",
+                    source_language = "",
                 }, anchored)
             end,
             on_error = function(err)
@@ -249,7 +250,11 @@ function Add.install(VocabDeck)
                 })
             end,
             on_success = function(result)
+                logger.info("VD+AI source_language from AI: '" .. (result.source_language or "") .. "'")
+                logger.info("VD+AI dict fallback: '" .. (params.dictionary_source_language or "") .. "'")
+                params.source_language = nil  -- let AI detection override metadata
                 self:_applyDefineResult(params, result)
+                logger.info("VD+AI final source_language: '" .. (params.source_language or "") .. "'")
                 self:_persistCard(params.phrase, "", params)
             end,
         })

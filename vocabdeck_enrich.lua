@@ -153,6 +153,10 @@ local function buildMessages(phrase, ai_context, target_language, source_languag
     local system_prompt = string.format(
         "You are a multilingual language tutor. You MUST reply with a single valid JSON object and nothing else " ..
         "(no prose, no code fences). The JSON object must contain exactly these keys: headword, pronunciation, word_type, meaning, synonym, source_language.\n" ..
+        "  source_language: FIRST, determine the source language from the context. " ..
+        "Look at the surrounding words in the context to identify the language. " ..
+        "If Known source language is given, use it. Otherwise read the context carefully — " ..
+        "do NOT assume English. Return as an English name, e.g. Spanish, Japanese.\n" ..
         "  pronunciation : IPA phonetic transcription of the headword (the value of the headword key). " ..
         "If the headword is a fixed multi-word phrase (e.g. \"por supuesto\", \"a priori\"), return empty string. " ..
         "If the headword is a single word (e.g. \"ponerse\", \"llamarse\"), provide its IPA.\n" ..
@@ -180,24 +184,25 @@ local function buildMessages(phrase, ai_context, target_language, source_languag
         "  word_type     : part of speech or a short grammatical label, e.g. noun, verb, adjective, phrase. Note: adverbial phrase, noun phrase, verb phrase, adjective phrase, idiom, and similar multi-word constructs should all be labeled simply as \"phrase\".\n" ..
         "  meaning       : one short, plain definition written in %s, ideally under 25 words.\n" ..
         "  synonym       : one to three useful synonyms or near-synonyms in the source language of the word or phrase, comma-separated; empty string if none are useful.\n" ..
-        "  source_language: the source language of the word or phrase, written as an English language name, e.g. Spanish, Japanese, German. " ..
-        "If Known source language is not provided in the user message, you MUST detect it from the surrounding context. " ..
-        "Do not assume English.\n" ..
+        "  source_language: use the language determined above from the context.\n" ..
         "Use the provided context to determine the correct meaning and source_language. " ..
         "Pay attention to how the word is used in context to select the most accurate sense. " ..
         "Do not add labels, markdown, or commentary.",
         target_language
     )
 
-    local user_parts = { "Word or phrase: \"" .. phrase .. "\"" }
+    local context_text = (ai_context and ai_context ~= "" and ai_context ~= phrase)
+        and ai_context or "(no context available)"
+    local user_parts = {}
+    if context_text ~= "(no context available)" then
+        user_parts[#user_parts + 1] = "Context: " .. context_text
+    end
+    user_parts[#user_parts + 1] = "Word or phrase: \"" .. phrase .. "\""
     if source_language and source_language ~= "" then
         user_parts[#user_parts + 1] = "Known source language: " .. source_language
     else
-        user_parts[#user_parts + 1] = "Important: detect the source language from the context. Do not assume English."
+        user_parts[#user_parts + 1] = "Important: detect the source language from the context above. Do not assume English."
     end
-    local context_text = (ai_context and ai_context ~= "" and ai_context ~= phrase)
-        and ai_context or "(no context available)"
-    user_parts[#user_parts + 1] = "Context: " .. context_text
     user_parts[#user_parts + 1] = "Return JSON only."
     local user_prompt = table.concat(user_parts, "\n\n")
 
