@@ -13,10 +13,27 @@ local Languages = require("vocabdeck_languages")
 
 local DB = {}
 
-local DB_SCHEMA_VERSION = 12
+local DB_SCHEMA_VERSION = 13
 local DB_DIRECTORY = ffiUtil.joinPath(DataStorage:getDataDir(), "vocabdeck")
-local DB_PATH = ffiUtil.joinPath(DB_DIRECTORY, "vocabdeck.sqlite3")
-local BACKUP_PATH = ffiUtil.joinPath(DB_DIRECTORY, "vocabdeck-backup.sqlite3")
+local LEGACY_DB_PATH = ffiUtil.joinPath(DB_DIRECTORY, "vocabdeck.sqlite3")
+local LEGACY_BACKUP_PATH = ffiUtil.joinPath(DB_DIRECTORY, "vocabdeck-backup.sqlite3")
+
+-- Per-language DB paths: VocabDeck/<LanguageName>.sqlite3
+DB.active_language = nil
+local function dbPathForLanguage(language)
+    if not language or language == "" then return LEGACY_DB_PATH end
+    return ffiUtil.joinPath(DB_DIRECTORY, language .. ".sqlite3")
+end
+local function backupPathForLanguage(language)
+    if not language or language == "" then return LEGACY_BACKUP_PATH end
+    return ffiUtil.joinPath(DB_DIRECTORY, language .. "-backup.sqlite3")
+end
+local function currentDbPath()
+    return dbPathForLanguage(DB.active_language)
+end
+local function currentBackupPath()
+    return backupPathForLanguage(DB.active_language)
+end
 
 local SCHEMA_STATEMENTS = {
     [[CREATE TABLE IF NOT EXISTS books (
@@ -310,7 +327,8 @@ end
 
 local function openConnection()
     ensureDirectory()
-    local conn = SQ3.open(DB_PATH)
+    local path = currentDbPath()
+    local conn = SQ3.open(path)
     conn:exec("PRAGMA foreign_keys = ON;")
     conn:exec("PRAGMA synchronous = NORMAL;")
     conn:exec("PRAGMA journal_mode = WAL;")
@@ -447,42 +465,239 @@ function DB.init()
 end
 
 function DB.getPath()
-    return DB_PATH
+    return currentDbPath()
 end
 
 function DB.getBackupPath()
-    return BACKUP_PATH
+    return currentBackupPath()
+end
+
+-- Switch the active language. Closes the old connection and re-inits
+-- against the per-language database file. Pass nil or "" to use the
+-- legacy single-file database (for migration).
+function DB.setLanguage(language)
+    if language and language ~= "" then
+        language = Languages.normalize(language)
+        if language == "" then language = nil end
+    end
+    if DB.active_language == language then return end
+    initialized = false
+    DB.active_language = language
+    DB.init()
+end
+
+-- Return the current active language, or nil if using the legacy DB.
+function DB.getActiveLanguage()
+    return DB.active_language
+end
+
+-- Scan the data directory for per-language .sqlite3 files and return
+-- a sorted list of language names. Excludes the legacy file and backups.
+function DB.listLanguages()
+    ensureDirectory()
+    local languages = {}
+    local lfs = require("libs/libkoreader-lfs")
+    for file in lfs.dir(DB_DIRECTORY) do
+        if file:match("%.sqlite3$") and not file:match("%-backup") and file ~= "vocabdeck.sqlite3" then
+            local lang = file:gsub("%.sqlite3$", "")
+            if lang ~= "" then
+                languages[#languages + 1] = lang
+            end
+        end
+    end
+    table.sort(languages)
+    return languages
+end
+
+-- Check whether the legacy single-file database still exists and needs
+-- to be split into per-language files.
+function DB.needsMigration()
+    local legacy = io.open(LEGACY_DB_PATH, "rb")
+    if not legacy then return false end
+    legacy:close()
+    -- Already have per-language files?
+    local langs = DB.listLanguages()
+    return #langs == 0
+end
+
+-- Split the legacy single-file database into one file per source_language.
+-- Returns true on success, false + error on failure.
+function DB.runMigration()
+    local legacy = io.open(LEGACY_DB_PATH, "rb")
+    if not legacy then
+        return false, "No legacy database found."
+    end
+    legacy:close()
+
+    local legacy_conn = SQ3.open(LEGACY_DB_PATH)
+    legacy_conn:exec("PRAGMA foreign_keys = ON;")
+
+    -- Get distinct languages
+    local lang_stmt = legacy_conn:prepare("SELECT DISTINCT source_language FROM cards WHERE source_language <> '';")
+    local lang_rows = lang_stmt:resultset("hik")
+    lang_stmt:close()
+
+    local languages = {}
+    if lang_rows and lang_rows[1] then
+        for i = 1, #lang_rows[1] do
+            languages[#languages + 1] = lang_rows[1][i]
+        end
+    end
+
+    if #languages == 0 then
+        legacy_conn:close()
+        return false, "No cards with source_language found."
+    end
+
+    local migrated = {}
+    for _, lang in ipairs(languages) do
+        local target_path = dbPathForLanguage(lang)
+        local target_conn = SQ3.open(target_path)
+        target_conn:exec("PRAGMA foreign_keys = ON;")
+
+        -- Create schema in target
+        execStatements(target_conn, SCHEMA_STATEMENTS)
+        ensureReviewHistoryTable(target_conn)
+
+        -- Copy books for this language
+        local book_stmt = legacy_conn:prepare("SELECT id, title, filepath, source_language, created_at FROM books WHERE source_language = ?;")
+        book_stmt:bind(lang)
+        local book_rows = book_stmt:resultset("hik")
+        book_stmt:close()
+        if book_rows and book_rows[1] then
+            local insert_book = target_conn:prepare("INSERT INTO books (id, title, filepath, source_language, created_at) VALUES (?, ?, ?, ?, ?);")
+            for i = 1, #book_rows[1] do
+                insert_book:clearbind():reset()
+                insert_book:bind(book_rows[1][i], book_rows[2][i], book_rows[3][i], book_rows[4][i], book_rows[5][i])
+                insert_book:step()
+            end
+            insert_book:close()
+        end
+
+        -- Copy cards for this language
+        local card_stmt = legacy_conn:prepare([[
+            SELECT id, book_id, phrase, normalized_phrase, sentence, ai_context, display_context,
+                   pronunciation, meaning, synonym, word_type, source_language, user_note,
+                   ai_memory_helper, ai_status, ai_error, due, fsrs_state, fsrs_step,
+                   fsrs_stability, fsrs_difficulty, last_review, review_count, lapse_count,
+                   suspended, leech, leech_notified_at, known, flag, study_more_day,
+                   created_at, updated_at
+            FROM cards WHERE source_language = ?;]])
+        card_stmt:bind(lang)
+        local card_rows = card_stmt:resultset("hik")
+        card_stmt:close()
+        if card_rows and card_rows[1] then
+            local insert_card = target_conn:prepare([[
+                INSERT INTO cards (id, book_id, phrase, normalized_phrase, sentence, ai_context, display_context,
+                    pronunciation, meaning, synonym, word_type, source_language, user_note,
+                    ai_memory_helper, ai_status, ai_error, due, fsrs_state, fsrs_step,
+                    fsrs_stability, fsrs_difficulty, last_review, review_count, lapse_count,
+                    suspended, leech, leech_notified_at, known, flag, study_more_day,
+                    created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);]])
+            for i = 1, #card_rows[1] do
+                insert_card:clearbind():reset()
+                for j = 1, 32 do
+                    insert_card:bind(card_rows[j][i])
+                end
+                insert_card:step()
+            end
+            insert_card:close()
+        end
+
+        -- Copy review_history for this language's cards
+        local rh_stmt = legacy_conn:prepare([[
+            SELECT r.id, r.card_id, r.reviewed_at, r.rating, r.state_before, r.state_after,
+                   r.due_before, r.due_after, r.elapsed_days, r.scheduled_days, r.actual_days,
+                   r.difficulty_before, r.stability_before, r.retrievability_before,
+                   r.difficulty_after, r.stability_after
+            FROM review_history r
+            JOIN cards c ON c.id = r.card_id
+            WHERE c.source_language = ?;]])
+        rh_stmt:bind(lang)
+        local rh_rows = rh_stmt:resultset("hik")
+        rh_stmt:close()
+        if rh_rows and rh_rows[1] then
+            local insert_rh = target_conn:prepare([[
+                INSERT INTO review_history (id, card_id, reviewed_at, rating, state_before, state_after,
+                    due_before, due_after, elapsed_days, scheduled_days, actual_days,
+                    difficulty_before, stability_before, retrievability_before,
+                    difficulty_after, stability_after)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);]])
+            for i = 1, #rh_rows[1] do
+                insert_rh:clearbind():reset()
+                for j = 1, 16 do
+                    insert_rh:bind(rh_rows[j][i])
+                end
+                insert_rh:step()
+            end
+            insert_rh:close()
+        end
+
+        -- Copy daily_overrides for this language
+        local do_stmt = legacy_conn:prepare("SELECT day, source_language, extra_new, extra_review, updated_at FROM daily_overrides WHERE source_language = ?;")
+        do_stmt:bind(lang)
+        local do_rows = do_stmt:resultset("hik")
+        do_stmt:close()
+        if do_rows and do_rows[1] then
+            local insert_do = target_conn:prepare("INSERT INTO daily_overrides (day, source_language, extra_new, extra_review, updated_at) VALUES (?, ?, ?, ?, ?);")
+            for i = 1, #do_rows[1] do
+                insert_do:clearbind():reset()
+                insert_do:bind(do_rows[1][i], do_rows[2][i], do_rows[3][i], do_rows[4][i], do_rows[5][i])
+                insert_do:step()
+            end
+            insert_do:close()
+        end
+
+        -- Set schema version
+        target_conn:exec("PRAGMA user_version = " .. DB_SCHEMA_VERSION .. ";")
+        target_conn:close()
+        migrated[#migrated + 1] = lang
+    end
+
+    legacy_conn:close()
+
+    -- Rename legacy file to backup so it's not picked up again
+    local backup_name = LEGACY_DB_PATH .. ".migrated"
+    os.rename(LEGACY_DB_PATH, backup_name)
+
+    return true, migrated
 end
 
 function DB.backupCards()
     DB.init()
     ensureDirectory()
+    local src = currentDbPath()
+    local dst = currentBackupPath()
     local conn = openConnection()
     pcall(conn.exec, conn, "PRAGMA wal_checkpoint(FULL);")
     conn:close()
-    local err = ffiUtil.copyFile(DB_PATH, BACKUP_PATH)
+    local err = ffiUtil.copyFile(src, dst)
     if err then
         return false, "Could not write backup."
     end
-    return true, BACKUP_PATH
+    return true, dst
 end
 
 function DB.restoreCardsBackup()
-    local backup = io.open(BACKUP_PATH, "rb")
+    local dst = currentBackupPath()
+    local backup = io.open(dst, "rb")
     if not backup then
         return false, "No VocabDeck backup found."
     end
     backup:close()
     ensureDirectory()
-    os.remove(DB_PATH .. "-wal")
-    os.remove(DB_PATH .. "-shm")
-    local err = ffiUtil.copyFile(BACKUP_PATH, DB_PATH)
+    local src = currentDbPath()
+    local bkp = currentBackupPath()
+    os.remove(src .. "-wal")
+    os.remove(src .. "-shm")
+    local err = ffiUtil.copyFile(bkp, src)
     if err then
         return false, "Could not restore backup."
     end
     initialized = false
     DB.init()
-    return true, BACKUP_PATH
+    return true, bkp
 end
 
 local function coerceNumber(value, default)
@@ -614,7 +829,10 @@ function DB.getOrCreateBook(title, filepath, source_language)
     if not filepath or filepath == "" then
         return nil
     end
-    source_language = normalizeSourceLanguage(source_language)
+    -- When using per-language decks the language is implied by the active DB;
+    -- the source_language parameter is kept for backward compat but may be
+    -- overridden by the active language.
+    local effective_language = normalizeSourceLanguage(DB.active_language or source_language)
     DB.init()
     return withConnection(function(conn)
         local stmt = conn:prepare("SELECT id FROM books WHERE filepath = ?;")
@@ -623,16 +841,16 @@ function DB.getOrCreateBook(title, filepath, source_language)
         stmt:close()
         local existing_id = rows and rows[1] and tonumber(rows[1][1]) or nil
         if existing_id then
-            if source_language ~= "" then
+            if effective_language ~= "" then
                 local update = conn:prepare("UPDATE books SET source_language = ? WHERE id = ? AND source_language = '';")
-                update:bind(source_language, existing_id)
+                update:bind(effective_language, existing_id)
                 update:step()
                 update:close()
             end
             return existing_id
         end
         local insert = conn:prepare("INSERT INTO books (title, filepath, source_language) VALUES (?, ?, ?);")
-        insert:bind(title or "", filepath, source_language)
+        insert:bind(title or "", filepath, effective_language)
         insert:step()
         insert:close()
         local new_id = conn:rowexec("SELECT last_insert_rowid();")

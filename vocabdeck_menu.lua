@@ -38,6 +38,7 @@ function Menu.build(plugin, config_error, plugin_version)
         callback = function()
             local filepath = plugin:getDocumentFilePath()
             if filepath then
+                DB.setLanguage(plugin:getDocumentSourceLanguage())
                 DB.getOrCreateBook(plugin:getDocumentTitle(), filepath, plugin:getDocumentSourceLanguage())
             end
             EditModule.showList(plugin, nil, _("All cards"))
@@ -49,6 +50,7 @@ function Menu.build(plugin, config_error, plugin_version)
         callback = function()
             local filepath = plugin:getDocumentFilePath()
             if not filepath then return end
+            DB.setLanguage(plugin:getDocumentSourceLanguage())
             local book_id = DB.getOrCreateBook(plugin:getDocumentTitle(), filepath, plugin:getDocumentSourceLanguage())
             EditModule.showList(plugin, book_id, plugin:getDocumentTitle())
         end,
@@ -71,6 +73,7 @@ function Menu.build(plugin, config_error, plugin_version)
         callback = function()
             local filepath = plugin:getDocumentFilePath()
             if not filepath then return end
+            DB.setLanguage(plugin:getDocumentSourceLanguage())
             local book_id = DB.getOrCreateBook(plugin:getDocumentTitle(), filepath, plugin:getDocumentSourceLanguage())
             plugin:bulkFetchMissing(book_id)
         end,

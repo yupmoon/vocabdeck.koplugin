@@ -73,6 +73,7 @@ function Context.install(VocabDeck)
             if source_language == "" then
                 return nil, _("Choose a source language first.")
             end
+            DB.setLanguage(source_language)
             local title = string.format(_("Manual entries (%s)"), source_language)
             local filepath = "vocabdeck://manual/" .. source_language
             local book_id = DB.getOrCreateBook(title, filepath, source_language)
@@ -85,7 +86,12 @@ function Context.install(VocabDeck)
         if not filepath then
             return nil, _("Open a book to save cards.")
         end
-        local book_id = DB.getOrCreateBook(self:getDocumentTitle(), filepath, self:getDocumentSourceLanguage())
+        local source_language = self:resolveSourceLanguage(params)
+        if source_language == "" then
+            source_language = self:getDocumentSourceLanguage()
+        end
+        DB.setLanguage(source_language)
+        local book_id = DB.getOrCreateBook(self:getDocumentTitle(), filepath, source_language)
         if not book_id then
             return nil, _("Failed to create book record.")
         end
