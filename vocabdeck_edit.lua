@@ -9,6 +9,7 @@ local _ = require("gettext")
 local BD = require("ui/bidi")
 local BottomContainer = require("ui/widget/container/bottomcontainer")
 local UIManager = require("ui/uimanager")
+local logger = require("logger")
 local Menu = require("ui/widget/menu")
 local InputDialog = require("ui/widget/inputdialog")
 local InfoMessage = require("ui/widget/infomessage")
@@ -891,7 +892,7 @@ function VocabDeckCardList:_buildLanguageTabs()
         DB.setLanguage(self.active_language)
     end
     local tab_group = HorizontalGroup:new{}
-    local tab_height = Screen:scaleBySize(32)
+    local tab_height = Screen:scaleBySize(28)
     local available_w = self.dimen.w - 2 * Size.padding.small
     local tab_width = math.floor(available_w / #languages)
     for _, lang in ipairs(languages) do
@@ -914,16 +915,15 @@ function VocabDeckCardList:_buildLanguageTabs()
         table.insert(tab_group, tab)
     end
     self.language_tabs = tab_group
-    self.tab_bar_height = tab_height + Size.padding.small
+    self.tab_bar_height = tab_height
 end
 
 function VocabDeckCardList:switchLanguage(language)
     if self.active_language == language then return end
     self.active_language = language
     DB.setLanguage(language)
-    -- Rebuild tabs in-place without touching the frame
+    -- Rebuild tabs in-place (tabs are in the footer now)
     if self.language_tabs then
-        -- Clear existing tab buttons
         while #self.language_tabs > 0 do
             self.language_tabs[#self.language_tabs] = nil
         end
@@ -954,10 +954,12 @@ function VocabDeckCardList:switchLanguage(language)
     self:_recount()
     self.item_table = self:_fetchPage()
     self.show_page = 1
+    self.main_content = VerticalGroup:new{}
+    self.frame_children[2] = self.main_content
+    self:_populateItems()
     self:updateTitleBar()
     self:refreshFooter()
-    self:_populateItems()
-    UIManager:setDirty(self, "ui")
+    UIManager:setDirty(self, "partial")
 end
 
 function VocabDeckCardList:updateTitleBar()
@@ -990,23 +992,6 @@ function VocabDeckCardList:init()
         }
     end
 
-    self.page_info = HorizontalGroup:new{}
-    self:refreshFooter()
-
-    local bottom_line = LineWidget:new{
-        dimen = Geom:new{ w = self.item_width, h = Size.line.thick },
-        background = Blitbuffer.COLOR_LIGHT_GRAY,
-    }
-    local vertical_footer = VerticalGroup:new{
-        bottom_line,
-        self.page_info,
-    }
-    self.footer_height = vertical_footer:getSize().h
-    self.footer_widget = BottomContainer:new{
-        dimen = self.dimen:copy(),
-        vertical_footer,
-    }
-
     self.title_bar = TitleBar:new{
         width = self.dimen.w,
         align = "center",
@@ -1028,6 +1013,25 @@ function VocabDeckCardList:init()
         self.tab_bar_height = 0
     end
 
+    self.page_info = HorizontalGroup:new{}
+    self:refreshFooter()
+
+    local bottom_line = LineWidget:new{
+        dimen = Geom:new{ w = self.item_width, h = Size.line.thick },
+        background = Blitbuffer.COLOR_LIGHT_GRAY,
+    }
+    local footer_children = VerticalGroup:new{}
+    if self.language_tabs then
+        table.insert(footer_children, self.language_tabs)
+    end
+    table.insert(footer_children, bottom_line)
+    table.insert(footer_children, self.page_info)
+    self.footer_height = footer_children:getSize().h
+    self.footer_widget = BottomContainer:new{
+        dimen = self.dimen:copy(),
+        footer_children,
+    }
+
     self:setupItemHeight()
     self.item_table = self:loadItems()
     self.main_content = VerticalGroup:new{}
@@ -1035,20 +1039,6 @@ function VocabDeckCardList:init()
 
     local frame_children = VerticalGroup:new{}
     table.insert(frame_children, self.title_bar)
-    if self.language_tabs then
-        table.insert(frame_children, FrameContainer:new{
-            padding = Size.padding.small,
-            padding_bottom = 0,
-            margin = 0,
-            bordersize = 0,
-            background = Blitbuffer.COLOR_WHITE,
-            self.language_tabs,
-        })
-        table.insert(frame_children, LineWidget:new{
-            dimen = Geom:new{ w = self.dimen.w, h = Size.line.thick },
-            background = Blitbuffer.COLOR_LIGHT_GRAY,
-        })
-    end
     table.insert(frame_children, self.main_content)
     self.frame_children = frame_children  -- store for tab switching
 
@@ -1173,8 +1163,7 @@ function VocabDeckCardList:setupItemHeight()
     self.item_height = Screen:scaleBySize(62)
     self.item_margin = Screen:scaleBySize(2)
     local line_height = self.item_height + self.item_margin
-    local tab_bar = (self.tab_bar_height or 0) + Size.padding.small
-    local content_height = self.dimen.h - self.title_bar:getHeight() - tab_bar - self.footer_height - Size.padding.large
+    local content_height = self.dimen.h - self.title_bar:getHeight() - self.footer_height - Size.padding.large
     self.items_per_page = math.max(1, math.floor(content_height / line_height))
     self.pages = math.ceil((self.total_items or #self.item_table) / self.items_per_page)
     self.show_page = math.max(1, math.min(math.max(1, self.pages), self.show_page))
@@ -1187,13 +1176,9 @@ function VocabDeckCardList:_populateItems()
     self:setupItemHeight()
 
     -- Gesture coordinates are relative to self (full screen).
-    -- main_content starts below the title bar and language tabs, so offset row positions.
-    local tab_bar_total = (self.tab_bar_height or 0)
-    if tab_bar_total > 0 then
-        tab_bar_total = tab_bar_total + Size.line.thick + Size.padding.small
-    end
-    local content_y_offset = self.title_bar:getHeight() + tab_bar_total
-    local y_offset = Size.padding.large  -- extra space below tabs
+    -- main_content starts below the title bar.
+    local content_y_offset = self.title_bar:getHeight()
+    local y_offset = Size.padding.small
     for idx, card in ipairs(self.item_table) do
         local margin = self.item_margin / (idx == 1 and 2 or 1)
         table.insert(self.main_content, VerticalSpan:new{ width = margin })
