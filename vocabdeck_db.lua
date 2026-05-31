@@ -13,7 +13,7 @@ local Languages = require("vocabdeck_languages")
 
 local DB = {}
 
-local DB_SCHEMA_VERSION = 13
+local DB_SCHEMA_VERSION = 14
 local DB_DIRECTORY = ffiUtil.joinPath(DataStorage:getDataDir(), "vocabdeck")
 local LEGACY_DB_PATH = ffiUtil.joinPath(DB_DIRECTORY, "vocabdeck.sqlite3")
 local LEGACY_BACKUP_PATH = ffiUtil.joinPath(DB_DIRECTORY, "vocabdeck-backup.sqlite3")
@@ -79,8 +79,7 @@ local SCHEMA_STATEMENTS = {
     )]],
     [[CREATE INDEX IF NOT EXISTS idx_cards_book ON cards(book_id)]],
     [[CREATE INDEX IF NOT EXISTS idx_cards_book_due ON cards(book_id, due)]],
-    [[CREATE INDEX IF NOT EXISTS idx_cards_source_due ON cards(source_language, due)]],
-    [[CREATE INDEX IF NOT EXISTS idx_cards_source_book_due ON cards(source_language, book_id, due)]],
+    [[CREATE INDEX IF NOT EXISTS idx_cards_due ON cards(due)]],
     [[CREATE INDEX IF NOT EXISTS idx_cards_ai_status ON cards(ai_status)]],
     [[CREATE INDEX IF NOT EXISTS idx_cards_updated_at ON cards(updated_at)]],
     [[CREATE TABLE IF NOT EXISTS review_history (
@@ -122,6 +121,7 @@ DB.STATUS_ENRICHED = 1
 DB.STATUS_ERROR = 2
 
 local initialized = false
+local initialized_languages = {}  -- per-language init cache
 
 local function execStatements(conn, statements)
     for _, statement in ipairs(statements) do
@@ -452,10 +452,16 @@ function DB.init()
     normalizeStoredSourceLanguages(conn)
     if hasNormalizedPhraseColumn(conn) then
         pcall(conn.exec, conn, "CREATE INDEX IF NOT EXISTS idx_cards_norm_phrase ON cards(normalized_phrase);")
-        pcall(conn.exec, conn, "CREATE INDEX IF NOT EXISTS idx_cards_source_norm_phrase ON cards(source_language, normalized_phrase);")
         backfillNormalizedPhrases(conn)
     else
         logger.warn("vocabdeck: normalized_phrase migration did not complete; skipping normalized phrase indexes")
+    end
+    if current_version < 14 then
+        -- Drop source_language-prefixed indexes (redundant with per-language files)
+        pcall(conn.exec, conn, "DROP INDEX IF EXISTS idx_cards_source_due;")
+        pcall(conn.exec, conn, "DROP INDEX IF EXISTS idx_cards_source_book_due;")
+        pcall(conn.exec, conn, "DROP INDEX IF EXISTS idx_cards_source_norm_phrase;")
+        pcall(conn.exec, conn, "CREATE INDEX IF NOT EXISTS idx_cards_due ON cards(due);")
     end
     if current_version ~= DB_SCHEMA_VERSION then
         conn:exec("PRAGMA user_version = " .. DB_SCHEMA_VERSION .. ";")
@@ -481,9 +487,13 @@ function DB.setLanguage(language)
         if language == "" then language = nil end
     end
     if DB.active_language == language then return end
-    initialized = false
     DB.active_language = language
-    DB.init()
+    local key = language or "__legacy__"
+    if not initialized_languages[key] then
+        initialized_languages[key] = true
+        initialized = false
+        DB.init()
+    end
 end
 
 -- Return the current active language, or nil if using the legacy DB.
