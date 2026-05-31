@@ -770,6 +770,9 @@ local VocabDeckCardList = FocusManager:extend{
     filter_source_language = "",
     filter_flagged = false,
     filter_ai_status = false,  -- false = all, true = not enriched only
+    filter_not_started = false,
+    filter_learning = false,
+    filter_learned = false,
     reviewable_only = false,
     show_known = false,
     quick_delete = false,
@@ -845,6 +848,13 @@ function VocabDeckCardList:_recount()
     self.total_items = DB.countCards(book_id, false, self.reviewable_only,
         self.filter_text, now, self.filter_word_type, self.filter_source_language,
         self.show_known, self.filter_flagged, self.filter_ai_status)
+    -- Adjust for local state filters not in DB query
+    if self.filter_not_started then
+        self.total_items = DB.countCards(book_id, false, self.reviewable_only,
+            self.filter_text, now, self.filter_word_type, self.filter_source_language,
+            self.show_known, false, self.filter_ai_status)
+        -- Approximate: we can't get exact with review_count=0 from DB
+    end
     self.pages = math.ceil(self.total_items / self.items_per_page)
     self.show_page = math.max(1, math.min(math.max(1, self.pages), self.show_page))
 end
@@ -864,7 +874,27 @@ end
 -- Full reload: re-count + fetch page. Used on initial load and filter changes.
 function VocabDeckCardList:loadItems()
     self:_recount()
-    return self:_fetchPage()
+    local cards = self:_fetchPage()
+    return self:_applyCardStateFilter(cards)
+end
+
+-- Apply local card-state filters (not in DB query)
+function VocabDeckCardList:_applyCardStateFilter(cards)
+    if not cards then return {} end
+    if not self.filter_not_started and not self.filter_learning and not self.filter_learned then
+        return cards
+    end
+    local filtered = {}
+    for _, c in ipairs(cards) do
+        if self.filter_not_started and (c.review_count or 0) == 0 then
+            filtered[#filtered + 1] = c
+        elseif self.filter_learning and (c.fsrs_state or 0) == 1 then
+            filtered[#filtered + 1] = c
+        elseif self.filter_learned and (c.known or 0) ~= 0 then
+            filtered[#filtered + 1] = c
+        end
+    end
+    return filtered
 end
 
 -- Fetch a single card at the given global 1-based index using the same
@@ -952,10 +982,8 @@ function VocabDeckCardList:switchLanguage(language)
     end
     self:setupItemHeight()
     self:_recount()
-    self.item_table = self:_fetchPage()
+    self.item_table = self:_applyCardStateFilter(self:_fetchPage())
     self.show_page = 1
-    self.main_content = VerticalGroup:new{}
-    self.frame_children[2] = self.main_content
     self:_populateItems()
     self:updateTitleBar()
     self:refreshFooter()
@@ -1141,13 +1169,13 @@ function VocabDeckCardList:refreshFooter()
         radius = 0,
         show_parent = self,
     }
-    self.footer_filter = Button:new{
-        text = _("Filter"),
+    self.footer_actions = Button:new{
+        text = _("Actions"),
         width = self.footer_side_width,
         bordersize = 0,
         radius = 0,
         show_parent = self,
-        callback = function() self:showFilterDialog() end,
+        callback = function() self:showActionsDialog() end,
     }
 
     table.insert(self.page_info, HorizontalSpan:new{ width = self.footer_side_width })
@@ -1156,7 +1184,7 @@ function VocabDeckCardList:refreshFooter()
     table.insert(self.page_info, self.footer_page)
     table.insert(self.page_info, self.footer_next)
     table.insert(self.page_info, self.footer_last)
-    table.insert(self.page_info, self.footer_filter)
+    table.insert(self.page_info, self.footer_actions)
 end
 
 function VocabDeckCardList:setupItemHeight()
@@ -1218,7 +1246,7 @@ function VocabDeckCardList:_populateItems()
         self.title_bar:setTitle(self:getTitle())
     end
     UIManager:setDirty(self, function()
-        return "ui", self.dimen
+        return "partial", self.dimen
     end)
 end
 
@@ -1274,7 +1302,7 @@ end
 function VocabDeckCardList:nextPage()
     if self.show_page < self.pages then
         self.show_page = self.show_page + 1
-        self.item_table = self:_fetchPage()
+        self.item_table = self:_applyCardStateFilter(self:_fetchPage())
         self:_populateItems()
     end
 end
@@ -1282,7 +1310,7 @@ end
 function VocabDeckCardList:prevPage()
     if self.show_page > 1 then
         self.show_page = self.show_page - 1
-        self.item_table = self:_fetchPage()
+        self.item_table = self:_applyCardStateFilter(self:_fetchPage())
         self:_populateItems()
     end
 end
@@ -1290,20 +1318,59 @@ end
 function VocabDeckCardList:goToPage(page)
     if not page or self.pages == 0 then return end
     self.show_page = math.max(1, math.min(self.pages, page))
-    self.item_table = self:_fetchPage()
+    self.item_table = self:_applyCardStateFilter(self:_fetchPage())
     self:_populateItems()
 end
 
-function VocabDeckCardList:showFilterDialog()
+function VocabDeckCardList:showActionsDialog()
     local dialog
     local buttons = {}
-
     local function closeDialog()
-        if dialog then
-            UIManager:close(dialog)
-        end
+        if dialog then UIManager:close(dialog) end
     end
-
+    buttons[#buttons + 1] = { {
+        text = self.book_id and _("Fetch AI data for this book") or _("Fetch AI data for all cards"),
+        callback = function()
+            closeDialog()
+            if self.plugin and self.plugin.bulkFetchMissing then
+                self.plugin:bulkFetchMissing(self.book_id, function()
+                    self:reloadItems()
+                end)
+            end
+        end,
+    } }
+    -- Search
+    buttons[#buttons + 1] = { {
+        text = _("Search"),
+        callback = function()
+            closeDialog()
+            self:showTextFilterDialog()
+        end,
+    } }
+    -- Sort
+    buttons[#buttons + 1] = { {
+        text = string.format(_("Sort: %s, %s"),
+            SORT_LABELS[self.sort_by] or SORT_LABELS.added,
+            SORT_DIR_LABELS[self.sort_dir] or SORT_DIR_LABELS.desc),
+        callback = function()
+            closeDialog()
+            self:showSortDialog()
+        end,
+    } }
+    -- Quick deletion
+    buttons[#buttons + 1] = { {
+        text = self.quick_delete and _("Quick deletion: ON") or _("Quick deletion: OFF"),
+        keep_menu_open = true,
+        callback = function()
+            self.quick_delete = not self.quick_delete
+            self:reloadItems()
+            closeDialog()
+            self:showActionsDialog()
+        end,
+    } }
+    -- Divider via separator
+    buttons[#buttons].separator = true
+    -- Word type
     buttons[#buttons + 1] = { {
         text = _("Word type"),
         callback = function()
@@ -1311,30 +1378,10 @@ function VocabDeckCardList:showFilterDialog()
             self:showWordTypeFilterDialog()
         end,
     } }
+    -- Not AI enriched
     buttons[#buttons + 1] = { {
-        text = _("Source language"),
-        callback = function()
-            closeDialog()
-            self:showSourceLanguageFilterDialog()
-        end,
-    } }
-    buttons[#buttons + 1] = { {
-        text = _("Flagged cards"),
-        checked_func = function()
-            return self.filter_flagged and true or false
-        end,
-        keep_menu_open = true,
-        callback = function()
-            self.filter_flagged = not self.filter_flagged
-            self.show_page = 1
-            self:reloadItems()
-        end,
-    } }
-    buttons[#buttons + 1] = { {
-        text = _("not ai enriched"),
-        checked_func = function()
-            return self.filter_ai_status and true or false
-        end,
+        text = _("Not AI enriched"),
+        checked_func = function() return self.filter_ai_status and true or false end,
         keep_menu_open = true,
         callback = function()
             self.filter_ai_status = not self.filter_ai_status
@@ -1342,31 +1389,24 @@ function VocabDeckCardList:showFilterDialog()
             self:reloadItems()
         end,
     } }
+    -- Clear filters
     buttons[#buttons + 1] = { {
         text = _("Clear filters"),
         enabled = (self.filter_word_type or "") ~= ""
-            or (self.filter_source_language or "") ~= ""
             or (self.filter_text or "") ~= ""
-            or self.filter_flagged
             or self.filter_ai_status,
         callback = function()
             self.filter_word_type = ""
-            self.filter_source_language = ""
             self.filter_text = ""
-            self.filter_flagged = false
             self.filter_ai_status = false
             closeDialog()
             self.show_page = 1
             self:reloadItems()
         end,
     } }
-    buttons[#buttons + 1] = { {
-        text = _("Close"),
-        callback = closeDialog,
-    } }
 
     dialog = ButtonDialog:new{
-        title = _("Filter cards"),
+        title = _("Actions"),
         buttons = buttons,
     }
     UIManager:show(dialog)
@@ -1634,63 +1674,137 @@ end
 
 function VocabDeckCardList:onShowMenu()
     local dialog
-    dialog = ButtonDialog:new{
-        title = _("VocabDeck cards"),
-        buttons = {
-            { {
-                text = self.book_id and _("Fetch AI data for this book") or _("Fetch AI data for all cards"),
+    local buttons = {}
+
+    local function closeDialog()
+        if dialog then UIManager:close(dialog) end
+    end
+
+    -- Card state filters
+    local all_active = not self.filter_flagged and not self.filter_not_started
+        and not self.filter_learning and not self.filter_learned
+    buttons[#buttons + 1] = { {
+        text = all_active and "✓ " .. _("All words") or _("All words"),
+        keep_menu_open = true,
+        callback = function()
+            self.filter_flagged = false
+            self.filter_not_started = false
+            self.filter_learning = false
+            self.filter_learned = false
+            self.show_page = 1
+            self:reloadItems()
+            closeDialog()
+            self:onShowMenu()
+        end,
+    } }
+    buttons[#buttons + 1] = { {
+        text = self.filter_flagged and "✓ " .. _("Flagged") or _("Flagged"),
+        keep_menu_open = true,
+        callback = function()
+            self.filter_flagged = not self.filter_flagged
+            if self.filter_flagged then
+                self.filter_not_started = false
+                self.filter_learning = false
+                self.filter_learned = false
+            end
+            self.show_page = 1
+            self:reloadItems()
+            closeDialog()
+            self:onShowMenu()
+        end,
+    } }
+    buttons[#buttons + 1] = { {
+        text = self.filter_not_started and "✓ " .. _("Not started") or _("Not started"),
+        keep_menu_open = true,
+        callback = function()
+            self.filter_not_started = not self.filter_not_started
+            if self.filter_not_started then
+                self.filter_flagged = false
+                self.filter_learning = false
+                self.filter_learned = false
+            end
+            self.show_page = 1
+            self:reloadItems()
+            closeDialog()
+            self:onShowMenu()
+        end,
+    } }
+    buttons[#buttons + 1] = { {
+        text = self.filter_learning and "✓ " .. _("Learning") or _("Learning"),
+        keep_menu_open = true,
+        callback = function()
+            self.filter_learning = not self.filter_learning
+            if self.filter_learning then
+                self.filter_flagged = false
+                self.filter_not_started = false
+                self.filter_learned = false
+            end
+            self.show_page = 1
+            self:reloadItems()
+            closeDialog()
+            self:onShowMenu()
+        end,
+    } }
+    buttons[#buttons + 1] = { {
+        text = self.filter_learned and "✓ " .. _("Learned") or _("Learned"),
+        keep_menu_open = true,
+        callback = function()
+            self.filter_learned = not self.filter_learned
+            if self.filter_learned then
+                self.filter_flagged = false
+                self.filter_not_started = false
+                self.filter_learning = false
+            end
+            self.show_page = 1
+            self:reloadItems()
+            closeDialog()
+            self:onShowMenu()
+        end,
+    } }
+    -- Divider
+    buttons[#buttons].separator = true
+
+    -- Book list
+    if not self.book_id then
+        local books = DB.listBooks()
+        local all_books_active = (self.filter_book_id == nil)
+        buttons[#buttons + 1] = { {
+            text = all_books_active and "✓ " .. _("All books") or _("All books"),
+            callback = function()
+                self.filter_book_id = nil
+                self.show_page = 1
+                self:reloadItems()
+                closeDialog()
+                self:onShowMenu()
+            end,
+        } }
+        for _, book in ipairs(books) do
+            local book_id = book.id
+            local title = book.title or _("Untitled")
+            local is_active = self.filter_book_id == book_id
+            buttons[#buttons + 1] = { {
+                text = is_active and "✓ " .. title or title,
+                mandatory = tostring(book.card_count or 0),
                 callback = function()
-                    UIManager:close(dialog)
-                    if self.plugin and self.plugin.bulkFetchMissing then
-                        self.plugin:bulkFetchMissing(self.book_id, function()
-                            self:reloadItems()
-                        end)
-                    end
-                end,
-            } },
-            { {
-                text = _("Search"),
-                callback = function()
-                    UIManager:close(dialog)
-                    self:showTextFilterDialog()
-                end,
-            } },
-            { {
-                text = _("Filter books"),
-                enabled = self.book_id == nil,
-                callback = function()
-                    UIManager:close(dialog)
-                    self:showBookFilter()
-                end,
-            } },
-            { {
-                text = string.format(_("Sort by: %s, %s"),
-                    SORT_LABELS[self.sort_by] or SORT_LABELS.added,
-                    SORT_DIR_LABELS[self.sort_dir] or SORT_DIR_LABELS.desc),
-                callback = function()
-                    UIManager:close(dialog)
-                    self:showSortDialog()
-                end,
-            } },
-            { {
-                text = _("Quick deletion"),
-                callback = function()
-                    self.quick_delete = not self.quick_delete
-                    UIManager:close(dialog)
+                    self.filter_book_id = book_id
+                    self.show_page = 1
                     self:reloadItems()
+                    closeDialog()
+                    self:onShowMenu()
                 end,
-            } },
-            { {
-                text = _("Close"),
-                callback = function() UIManager:close(dialog) end,
-            } },
-        },
+            } }
+        end
+    end
+
+    dialog = ButtonDialog:new{
+        title = _("Cards"),
+        buttons = buttons,
     }
     UIManager:show(dialog)
 end
 
 function VocabDeckCardList:onShow()
-    UIManager:setDirty(self, "flashui")
+    UIManager:setDirty(self, "partial")
 end
 
 function VocabDeckCardList:onNextPage()
