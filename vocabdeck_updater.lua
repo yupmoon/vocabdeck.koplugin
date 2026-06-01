@@ -163,12 +163,22 @@ end
 
 -- ── Public API ──────────────────────────────────────────────────────────────
 
---- Checks for updates and prompts the user if a newer version is available.
---- Uses Trapper subprocess for all network I/O so the UI stays responsive.
---- @param plugin table  The VocabDeck plugin instance.
---- @param current_version string  The current plugin version string.
+local CHECK_INTERVAL = 3600  -- seconds between network checks (1 hour)
+local GS_KEY_TIME  = "vocabdeck_last_update_check"
+local GS_KEY_AVAIL = "vocabdeck_update_available"
+local GS_KEY_VER   = "vocabdeck_latest_version"
+local GS_KEY_DESC  = "vocabdeck_latest_description"
+
+--- Load reader settings helper.
+local function getGS()
+    local ok, gs = pcall(function() return G_reader_settings end)
+    return (ok and gs) or nil
+end
+
+--- Check for updates. Caches result for 24h so repeated taps don't hit
+--- the network. Shows dialogs directly — no Trapper coroutine needed
+--- for the check (blocking HTTP is fine for user-initiated actions).
 function Updater.check(plugin, current_version)
-    -- Read update_url from _meta.lua
     local plugin_dir = getPluginDir()
     if not plugin_dir then
         UIManager:show(InfoMessage:new{
@@ -184,76 +194,115 @@ function Updater.check(plugin, current_version)
         return
     end
 
-    -- Ensure Wi-Fi is on before proceeding
     if not NetworkMgr:isWifiOn() then
-        NetworkMgr:runWhenOnline(function()
-            Updater.check(plugin, current_version)
-        end)
+        UIManager:show(InfoMessage:new{
+            text = _("Wi-Fi is not enabled. Please connect to the internet first."),
+        })
         return
     end
 
-    -- Wrap in Trapper:wrap() so dismissableRunInSubprocess runs in a coroutine.
-    -- Without this, Trapper falls back to blocking in-process execution, which
-    -- freezes the UI and prevents the InfoMessage from rendering properly.
-    Trapper:wrap(function()
-        -- Show initial status message
-        local status_msg = showMessage("Checking for updates…")
+    local gs = getGS()
+    local now = os.time()
+    local last = gs and gs:readSetting(GS_KEY_TIME) or 0
+    local last_num = type(last) == "number" and last or 0
 
-        -- Step 1: Fetch release info from GitHub API (runs in subprocess)
-        local completed, body = Trapper:dismissableRunInSubprocess(function()
-            return httpsGet(meta.update_url)
-        end, status_msg)
-
-        if not completed then
-            -- User dismissed / cancelled
-            closeMessage(status_msg)
-            return
-        end
-
-        local release_data = safeDecodeJson(body)
-        if not release_data then
-            closeMessage(status_msg)
+    -- Return cached result if checked recently
+    if (now - last_num) < CHECK_INTERVAL and gs then
+        local cached_avail = gs:readSetting(GS_KEY_AVAIL) == true
+        local cached_ver   = gs:readSetting(GS_KEY_VER) or ""
+        local cached_desc  = gs:readSetting(GS_KEY_DESC) or ""
+        if cached_avail and semverGt(cached_ver, current_version) then
             UIManager:show(InfoMessage:new{
-                text = _("Failed to check for updates.\n\nCould not reach the update server. Check your internet connection."),
+                text = T(_("Update available\n\nv%1 → v%2\n\n%3"), current_version, cached_ver, cached_desc),
+                dismiss_callback = function()
+                    UIManager:show(ConfirmBox:new{
+                        text = _("Download and install this update?"),
+                        ok_text = _("Update"),
+                        ok_callback = function()
+                            Updater._install(plugin_dir, {
+                                version = cached_ver,
+                                zip_url = meta.update_url:gsub("/releases/latest", "/zipball/v" .. cached_ver),
+                            })
+                        end,
+                    })
+                end,
             })
-            return
-        end
-
-        local release = parseReleaseInfo(release_data)
-        if not release then
-            closeMessage(status_msg)
-            UIManager:show(InfoMessage:new{
-                text = _("Failed to parse release information."),
-            })
-            return
-        end
-
-        -- Step 2: Compare versions
-        if not semverGt(release.version, current_version) then
-            closeMessage(status_msg)
+        else
             UIManager:show(InfoMessage:new{
                 text = T(_("VocabDeck is up to date (v%1)."), current_version),
                 timeout = 3,
             })
-            return
         end
+        return
+    end
 
-        -- Step 3: Ask user to update
-        closeMessage(status_msg)
-        UIManager:show(ConfirmBox:new{
-            text = T(_("Update available\n\nv%1 → v%2"), current_version, release.version),
-            ok_text = _("Update"),
-            ok_callback = function()
-                if Device.isEmulator() then
-                    UIManager:show(InfoMessage:new{
-                        text = _("Emulator detected.\nUpdates are not applied in the emulator."),
-                    })
-                    return
-                end
-                Updater._install(plugin_dir, release)
-            end,
+    -- Show checking message
+    local status_msg = showMessage("Checking for updates…")
+
+    -- Live check: blocking HTTPS, fast for Wi-Fi connections
+    local body = httpsGet(meta.update_url)
+    closeMessage(status_msg)
+
+    if not body then
+        UIManager:show(InfoMessage:new{
+            text = _("Failed to check for updates.\n\nCould not reach the update server. Check your internet connection."),
         })
-    end)
+        return
+    end
+
+    local release_data = safeDecodeJson(body)
+    if not release_data then
+        UIManager:show(InfoMessage:new{
+            text = _("Failed to parse release information."),
+        })
+        return
+    end
+
+    local release = parseReleaseInfo(release_data)
+    if not release then
+        UIManager:show(InfoMessage:new{
+            text = _("Failed to parse release information."),
+        })
+        return
+    end
+
+    -- Cache the result
+    if gs then
+        local has_upd = semverGt(release.version, current_version)
+        gs:saveSetting(GS_KEY_TIME, now)
+        gs:saveSetting(GS_KEY_AVAIL, has_upd)
+        gs:saveSetting(GS_KEY_VER, release.version)
+        gs:saveSetting(GS_KEY_DESC, release.description or "")
+        pcall(gs.flush, gs)
+    end
+
+    -- Show result
+    if not semverGt(release.version, current_version) then
+        UIManager:show(InfoMessage:new{
+            text = T(_("VocabDeck is up to date (v%1)."), current_version),
+            timeout = 3,
+        })
+        return
+    end
+
+    UIManager:show(InfoMessage:new{
+        text = T(_("Update available\n\nv%1 → v%2\n\n%3"), current_version, release.version, release.description or ""),
+        dismiss_callback = function()
+            UIManager:show(ConfirmBox:new{
+                text = _("Download and install this update?"),
+                ok_text = _("Update"),
+                ok_callback = function()
+                    if Device.isEmulator() then
+                        UIManager:show(InfoMessage:new{
+                            text = _("Emulator detected.\nUpdates are not applied in the emulator."),
+                        })
+                        return
+                    end
+                    Updater._install(plugin_dir, release)
+                end,
+            })
+        end,
+    })
 end
 
 --- Download, verify, and install an update.

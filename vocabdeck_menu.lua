@@ -105,7 +105,6 @@ function Menu.build(plugin, config_error, plugin_version)
     end
     items[#items + 1] = {
         text = _("Check for updates"),
-        keep_menu_open = true,
         callback = function()
             Updater.check(plugin, plugin_version)
         end,
