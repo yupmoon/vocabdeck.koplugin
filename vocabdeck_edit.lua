@@ -1437,7 +1437,7 @@ function VocabDeckCardList:showWordTypeFilterDialog()
         text = _("Back"),
         callback = function()
             UIManager:close(dialog)
-            self:showFilterDialog()
+            self:showActionsDialog()
         end,
     } }
 
@@ -1499,7 +1499,7 @@ function VocabDeckCardList:showSourceLanguageFilterDialog()
         text = _("Back"),
         callback = function()
             UIManager:close(dialog)
-            self:showFilterDialog()
+            self:showActionsDialog()
         end,
     } }
 
@@ -1789,7 +1789,7 @@ function VocabDeckCardList:onSwipe(_, ges_ev)
     elseif direction == "south" then
         self:onClose()
     elseif direction == "north" then
-        self:showFilterDialog()
+        self:showActionsDialog()
     else
         return false
     end
