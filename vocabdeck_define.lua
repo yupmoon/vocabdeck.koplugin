@@ -49,7 +49,8 @@ function Define.install(VocabDeck)
         params.synonym = Capture.cleanMeaning(result.synonym or "")
         params.pronunciation = Capture.cleanMeaning(result.pronunciation or "")
         params.word_type = Capture.cleanMeaning(result.word_type or "")
-        if (params.source_language or "") == "" then
+        local ai_lang = Capture.cleanMeaning(result.source_language or "")
+        if (params.source_language or "") == "" or ai_lang ~= "" then
             params.source_language = self:resolveSourceLanguage{
                 source_language = Capture.cleanMeaning(result.source_language or ""),
                 dictionary_source_language = params.dictionary_source_language,
@@ -124,7 +125,7 @@ function Define.install(VocabDeck)
                     phrase = params.phrase,
                     ai_context = Capture.firstText(params.ai_context, params.sentence, params.display_context),
                     is_phrase = Capture.isPhrase(params.phrase),
-                    source_language = params.source_language,
+                    source_language = "",  -- let AI detect independently
                 }, anchored)
             end,
             on_error = function(define_err)
