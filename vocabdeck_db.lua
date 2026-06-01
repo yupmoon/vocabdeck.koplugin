@@ -1824,6 +1824,12 @@ function DB.moveCardToLanguage(card_id, target_language)
     DB.setLanguage(target_language)
     local target_book_id = DB.getBookIdByFilepath(book_filepath)
         or DB.getOrCreateBook(book_title, book_filepath, target_language)
+    if not target_book_id then
+        if prev_lang and prev_lang ~= target_language then
+            DB.setLanguage(prev_lang)
+        end
+        return false
+    end
     local new_id = withConnection(function(conn)
         local stmt = conn:prepare([[
             INSERT INTO cards (book_id, phrase, normalized_phrase, sentence, ai_context,
@@ -1832,7 +1838,7 @@ function DB.moveCardToLanguage(card_id, target_language)
                 fsrs_stability, fsrs_difficulty, last_review, review_count, lapse_count,
                 suspended, leech, leech_notified_at, known, flag, study_more_day,
                 moved, created_at, updated_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);]])
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);]])
         stmt:bind(target_book_id, card.phrase, card.normalized_phrase or "",
             card.sentence or "", card.ai_context or "", card.display_context or "",
             card.pronunciation or "", card.meaning or "", card.synonym or "",
