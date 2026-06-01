@@ -588,6 +588,40 @@ local function showCardDetails(plugin, card, nav_context, on_refresh)
                 })
             end,
         },
+        {
+            text = _("Move to deck"),
+            callback = function()
+                local langs = DB.listLanguages()
+                local current = DB.getActiveLanguage() or ""
+                local items = {}
+                for __, lang in ipairs(langs) do
+                    if lang ~= current then
+                        items[#items + 1] = {
+                            text = lang,
+                            callback = function()
+                                DB.moveCardToLanguage(card.id, lang)
+                                closeViewer()
+                                UIManager:show(InfoMessage:new{
+                                    text = string.format(_("Moved to %s."), lang),
+                                    timeout = 2,
+                                })
+                                if on_refresh then on_refresh() end
+                            end,
+                        }
+                    end
+                end
+                if #items == 0 then
+                    UIManager:show(InfoMessage:new{ text = _("No other decks."), timeout = 2 })
+                    return
+                end
+                UIManager:show(Menu:new{
+                    title = _("Move to deck"),
+                    item_table = items,
+                    covers_fullscreen = false,
+                    width = math.floor(Screen:getWidth() * 0.6),
+                })
+            end,
+        },
     })
     table.insert(buttons, {
         {

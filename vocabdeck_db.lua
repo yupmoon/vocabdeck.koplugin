@@ -13,7 +13,7 @@ local Languages = require("vocabdeck_languages")
 
 local DB = {}
 
-local DB_SCHEMA_VERSION = 14
+local DB_SCHEMA_VERSION = 15
 local DB_DIRECTORY = ffiUtil.joinPath(DataStorage:getDataDir(), "vocabdeck")
 local LEGACY_DB_PATH = ffiUtil.joinPath(DB_DIRECTORY, "vocabdeck.sqlite3")
 local LEGACY_BACKUP_PATH = ffiUtil.joinPath(DB_DIRECTORY, "vocabdeck-backup.sqlite3")
@@ -74,6 +74,7 @@ local SCHEMA_STATEMENTS = {
         known INTEGER NOT NULL DEFAULT 0,
         flag INTEGER NOT NULL DEFAULT 0,
         study_more_day TEXT NOT NULL DEFAULT '',
+        moved INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
         updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
     )]],
@@ -456,15 +457,10 @@ function DB.init()
     else
         logger.warn("vocabdeck: normalized_phrase migration did not complete; skipping normalized phrase indexes")
     end
-    if current_version < 14 then
-        -- Drop source_language-prefixed indexes (redundant with per-language files)
-        pcall(conn.exec, conn, "DROP INDEX IF EXISTS idx_cards_source_due;")
-        pcall(conn.exec, conn, "DROP INDEX IF EXISTS idx_cards_source_book_due;")
-        pcall(conn.exec, conn, "DROP INDEX IF EXISTS idx_cards_source_norm_phrase;")
-        pcall(conn.exec, conn, "CREATE INDEX IF NOT EXISTS idx_cards_due ON cards(due);")
+    if current_version < 15 then
+        pcall(conn.exec, conn, "ALTER TABLE cards ADD COLUMN moved INTEGER NOT NULL DEFAULT 0;")
     end
     if current_version ~= DB_SCHEMA_VERSION then
-        conn:exec("PRAGMA user_version = " .. DB_SCHEMA_VERSION .. ";")
     end
     conn:close()
     initialized = true
@@ -1772,6 +1768,112 @@ function DB.updateCardSourceLanguage(card_id, source_language)
         DB.invalidateSummaryCache()
         return true
     end)
+end
+
+-- Move a card to another language deck. Preserves the original book,
+-- review history, and all card data. Only the source_language changes.
+-- Sets moved=1 on the new card for future identification.
+function DB.moveCardToLanguage(card_id, target_language)
+    if not card_id or not target_language or target_language == "" then return false end
+    target_language = normalizeSourceLanguage(target_language)
+    if target_language == "" then return false end
+    DB.init()
+    local card = DB.getCard(card_id)
+    if not card then return false end
+    -- Fetch review history from current DB
+    local history = {}
+    withConnection(function(conn)
+        local stmt = conn:prepare([[SELECT reviewed_at, rating, state_before, state_after,
+            due_before, due_after, elapsed_days, scheduled_days, actual_days,
+            difficulty_before, stability_before, retrievability_before,
+            difficulty_after, stability_after
+            FROM review_history WHERE card_id = ? ORDER BY reviewed_at;]])
+        stmt:bind(card_id)
+        local rows = stmt:resultset("hik")
+        stmt:close()
+        if rows and rows[1] then
+            for i = 1, #rows[1] do
+                history[#history + 1] = {
+                    reviewed_at = rows[1][i], rating = rows[2][i],
+                    state_before = rows[3][i], state_after = rows[4][i],
+                    due_before = rows[5][i], due_after = rows[6][i],
+                    elapsed_days = rows[7][i], scheduled_days = rows[8][i],
+                    actual_days = rows[9][i], difficulty_before = rows[10][i],
+                    stability_before = rows[11][i], retrievability_before = rows[12][i],
+                    difficulty_after = rows[13][i], stability_after = rows[14][i],
+                }
+            end
+        end
+    end)
+    -- Get original book info before switching
+    local book_title, book_filepath
+    withConnection(function(conn)
+        local stmt = conn:prepare("SELECT b.title, b.filepath FROM books b JOIN cards c ON c.book_id = b.id WHERE c.id = ?;")
+        stmt:bind(card_id)
+        local rows = stmt:resultset("hik")
+        stmt:close()
+        if rows and rows[1] then
+            book_title = rows[1][1]
+            book_filepath = rows[2][1]
+        end
+    end)
+    book_title = book_title or "Moved cards"
+    book_filepath = book_filepath or "vocabdeck://moved/" .. card_id
+    -- Switch to target language, ensure same book exists
+    local prev_lang = DB.active_language
+    DB.setLanguage(target_language)
+    local target_book_id = DB.getBookIdByFilepath(book_filepath)
+        or DB.getOrCreateBook(book_title, book_filepath, target_language)
+    local new_id = withConnection(function(conn)
+        local stmt = conn:prepare([[
+            INSERT INTO cards (book_id, phrase, normalized_phrase, sentence, ai_context,
+                display_context, pronunciation, meaning, synonym, word_type, source_language,
+                user_note, ai_memory_helper, ai_status, ai_error, due, fsrs_state, fsrs_step,
+                fsrs_stability, fsrs_difficulty, last_review, review_count, lapse_count,
+                suspended, leech, leech_notified_at, known, flag, study_more_day,
+                moved, created_at, updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);]])
+        stmt:bind(target_book_id, card.phrase, card.normalized_phrase or "",
+            card.sentence or "", card.ai_context or "", card.display_context or "",
+            card.pronunciation or "", card.meaning or "", card.synonym or "",
+            card.word_type or "", target_language, card.user_note or "",
+            card.ai_memory_helper or "", card.ai_status or 0, card.ai_error or "",
+            card.due or os.time(), card.fsrs_state or 1, card.fsrs_step or 0,
+            card.fsrs_stability or 0, card.fsrs_difficulty or 0,
+            card.last_review, card.review_count or 0, card.lapse_count or 0,
+            card.suspended or 0, card.leech or 0, card.leech_notified_at,
+            card.known or 0, card.flag or 0, card.study_more_day or "",
+            1,  -- moved
+            card.created_at or os.time(), os.time())
+        stmt:step()
+        stmt:close()
+        return conn:rowexec("SELECT last_insert_rowid();")
+    end)
+    new_id = tonumber(new_id)
+    if new_id and #history > 0 then
+        withConnection(function(conn)
+            local stmt = conn:prepare([[
+                INSERT INTO review_history (card_id, reviewed_at, rating, state_before,
+                    state_after, due_before, due_after, elapsed_days, scheduled_days,
+                    actual_days, difficulty_before, stability_before, retrievability_before,
+                    difficulty_after, stability_after)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);]])
+            for _, h in ipairs(history) do
+                stmt:clearbind():reset()
+                stmt:bind(new_id, h.reviewed_at, h.rating, h.state_before, h.state_after,
+                    h.due_before, h.due_after, h.elapsed_days, h.scheduled_days, h.actual_days,
+                    h.difficulty_before, h.stability_before, h.retrievability_before,
+                    h.difficulty_after, h.stability_after)
+                stmt:step()
+            end
+            stmt:close()
+        end)
+    end
+    if prev_lang and prev_lang ~= target_language then
+        DB.setLanguage(prev_lang)
+    end
+    DB.deleteCard(card_id)
+    return true
 end
 
 -- Return the book_id for a card, or nil.
