@@ -987,7 +987,6 @@ function VocabDeckCardList:switchLanguage(language)
     self:_populateItems()
     self:updateTitleBar()
     self:refreshFooter()
-    UIManager:setDirty(self, "partial")
 end
 
 function VocabDeckCardList:updateTitleBar()
@@ -1246,7 +1245,7 @@ function VocabDeckCardList:_populateItems()
         self.title_bar:setTitle(self:getTitle())
     end
     UIManager:setDirty(self, function()
-        return "partial", self.dimen
+        return "fast", self.dimen
     end)
 end
 
@@ -1323,74 +1322,61 @@ function VocabDeckCardList:goToPage(page)
 end
 
 function VocabDeckCardList:showActionsDialog()
-    local dialog
-    local buttons = {}
-    local function closeDialog()
-        if dialog then UIManager:close(dialog) end
-    end
-    buttons[#buttons + 1] = { {
+    local item_table = {}
+
+    item_table[#item_table + 1] = {
         text = self.book_id and _("Fetch AI data for this book") or _("Fetch AI data for all cards"),
         callback = function()
-            closeDialog()
             if self.plugin and self.plugin.bulkFetchMissing then
                 self.plugin:bulkFetchMissing(self.book_id, function()
                     self:reloadItems()
                 end)
             end
         end,
-    } }
-    -- Search
-    buttons[#buttons + 1] = { {
+    }
+    item_table[#item_table + 1] = {
         text = _("Search"),
         callback = function()
-            closeDialog()
             self:showTextFilterDialog()
         end,
-    } }
-    -- Sort
-    buttons[#buttons + 1] = { {
+    }
+    item_table[#item_table + 1] = {
         text = string.format(_("Sort: %s, %s"),
             SORT_LABELS[self.sort_by] or SORT_LABELS.added,
             SORT_DIR_LABELS[self.sort_dir] or SORT_DIR_LABELS.desc),
         callback = function()
-            closeDialog()
             self:showSortDialog()
         end,
-    } }
-    -- Quick deletion
-    buttons[#buttons + 1] = { {
-        text = self.quick_delete and _("Quick deletion: ON") or _("Quick deletion: OFF"),
+    }
+    item_table[#item_table + 1] = {
+        text_func = function()
+            return self.quick_delete and _("Quick deletion: ON") or _("Quick deletion: OFF")
+        end,
         keep_menu_open = true,
         callback = function()
             self.quick_delete = not self.quick_delete
             self:reloadItems()
-            closeDialog()
-            self:showActionsDialog()
         end,
-    } }
-    -- Divider via separator
-    buttons[#buttons].separator = true
-    -- Word type
-    buttons[#buttons + 1] = { {
+    }
+    item_table[#item_table].separator = true
+    item_table[#item_table + 1] = {
         text = _("Word type"),
         callback = function()
-            closeDialog()
             self:showWordTypeFilterDialog()
         end,
-    } }
-    -- Not AI enriched
-    buttons[#buttons + 1] = { {
-        text = _("Not AI enriched"),
-        checked_func = function() return self.filter_ai_status and true or false end,
+    }
+    item_table[#item_table + 1] = {
+        text_func = function()
+            return self.filter_ai_status and "✓ " .. _("Not AI enriched") or _("Not AI enriched")
+        end,
         keep_menu_open = true,
         callback = function()
             self.filter_ai_status = not self.filter_ai_status
             self.show_page = 1
             self:reloadItems()
         end,
-    } }
-    -- Clear filters
-    buttons[#buttons + 1] = { {
+    }
+    item_table[#item_table + 1] = {
         text = _("Clear filters"),
         enabled = (self.filter_word_type or "") ~= ""
             or (self.filter_text or "") ~= ""
@@ -1399,17 +1385,17 @@ function VocabDeckCardList:showActionsDialog()
             self.filter_word_type = ""
             self.filter_text = ""
             self.filter_ai_status = false
-            closeDialog()
             self.show_page = 1
             self:reloadItems()
         end,
-    } }
-
-    dialog = ButtonDialog:new{
-        title = _("Actions"),
-        buttons = buttons,
     }
-    UIManager:show(dialog)
+
+    UIManager:show(Menu:new{
+        title = _("Actions"),
+        item_table = item_table,
+        covers_fullscreen = false,
+        width = math.floor(Screen:getWidth() * 0.7),
+    })
 end
 
 function VocabDeckCardList:showWordTypeFilterDialog()
@@ -1673,18 +1659,12 @@ function VocabDeckCardList:showSortDialog()
 end
 
 function VocabDeckCardList:onShowMenu()
-    local dialog
-    local buttons = {}
+    local item_table = {}
 
-    local function closeDialog()
-        if dialog then UIManager:close(dialog) end
-    end
-
-    -- Card state filters
     local all_active = not self.filter_flagged and not self.filter_not_started
         and not self.filter_learning and not self.filter_learned
-    buttons[#buttons + 1] = { {
-        text = all_active and "✓ " .. _("All words") or _("All words"),
+    item_table[#item_table + 1] = {
+        text = all_active and _("✓ All words") or _("All words"),
         keep_menu_open = true,
         callback = function()
             self.filter_flagged = false
@@ -1693,12 +1673,10 @@ function VocabDeckCardList:onShowMenu()
             self.filter_learned = false
             self.show_page = 1
             self:reloadItems()
-            closeDialog()
-            self:onShowMenu()
         end,
-    } }
-    buttons[#buttons + 1] = { {
-        text = self.filter_flagged and "✓ " .. _("Flagged") or _("Flagged"),
+    }
+    item_table[#item_table + 1] = {
+        text = self.filter_flagged and _("✓ Flagged") or _("Flagged"),
         keep_menu_open = true,
         callback = function()
             self.filter_flagged = not self.filter_flagged
@@ -1709,12 +1687,10 @@ function VocabDeckCardList:onShowMenu()
             end
             self.show_page = 1
             self:reloadItems()
-            closeDialog()
-            self:onShowMenu()
         end,
-    } }
-    buttons[#buttons + 1] = { {
-        text = self.filter_not_started and "✓ " .. _("Not started") or _("Not started"),
+    }
+    item_table[#item_table + 1] = {
+        text = self.filter_not_started and _("✓ Not started") or _("Not started"),
         keep_menu_open = true,
         callback = function()
             self.filter_not_started = not self.filter_not_started
@@ -1725,12 +1701,10 @@ function VocabDeckCardList:onShowMenu()
             end
             self.show_page = 1
             self:reloadItems()
-            closeDialog()
-            self:onShowMenu()
         end,
-    } }
-    buttons[#buttons + 1] = { {
-        text = self.filter_learning and "✓ " .. _("Learning") or _("Learning"),
+    }
+    item_table[#item_table + 1] = {
+        text = self.filter_learning and _("✓ Learning") or _("Learning"),
         keep_menu_open = true,
         callback = function()
             self.filter_learning = not self.filter_learning
@@ -1741,12 +1715,10 @@ function VocabDeckCardList:onShowMenu()
             end
             self.show_page = 1
             self:reloadItems()
-            closeDialog()
-            self:onShowMenu()
         end,
-    } }
-    buttons[#buttons + 1] = { {
-        text = self.filter_learned and "✓ " .. _("Learned") or _("Learned"),
+    }
+    item_table[#item_table + 1] = {
+        text = self.filter_learned and _("✓ Learned") or _("Learned"),
         keep_menu_open = true,
         callback = function()
             self.filter_learned = not self.filter_learned
@@ -1757,50 +1729,41 @@ function VocabDeckCardList:onShowMenu()
             end
             self.show_page = 1
             self:reloadItems()
-            closeDialog()
-            self:onShowMenu()
         end,
-    } }
-    -- Divider
-    buttons[#buttons].separator = true
+    }
+    item_table[#item_table].separator = true
 
-    -- Book list
     if not self.book_id then
         local books = DB.listBooks()
-        local all_books_active = (self.filter_book_id == nil)
-        buttons[#buttons + 1] = { {
-            text = all_books_active and "✓ " .. _("All books") or _("All books"),
+        item_table[#item_table + 1] = {
+            text = self.filter_book_id == nil and _("✓ All books") or _("All books"),
             callback = function()
                 self.filter_book_id = nil
                 self.show_page = 1
                 self:reloadItems()
-                closeDialog()
-                self:onShowMenu()
             end,
-        } }
+        }
         for _, book in ipairs(books) do
             local book_id = book.id
             local title = book.title or _("Untitled")
-            local is_active = self.filter_book_id == book_id
-            buttons[#buttons + 1] = { {
-                text = is_active and "✓ " .. title or title,
+            item_table[#item_table + 1] = {
+                text = self.filter_book_id == book_id and "✓ " .. title or title,
                 mandatory = tostring(book.card_count or 0),
                 callback = function()
                     self.filter_book_id = book_id
                     self.show_page = 1
                     self:reloadItems()
-                    closeDialog()
-                    self:onShowMenu()
                 end,
-            } }
+            }
         end
     end
 
-    dialog = ButtonDialog:new{
+    UIManager:show(Menu:new{
         title = _("Cards"),
-        buttons = buttons,
-    }
-    UIManager:show(dialog)
+        item_table = item_table,
+        covers_fullscreen = false,
+        width = math.floor(Screen:getWidth() * 0.7),
+    })
 end
 
 function VocabDeckCardList:onShow()
