@@ -240,29 +240,17 @@ function Updater.check(plugin, current_version)
 
         -- Step 3: Ask user to update
         closeMessage(status_msg)
-        UIManager:show(InfoMessage:new{
-            show_icon = false,
-            text = T(_("Update available\n\n%1 v%2 → v%3\n\n%4"),
-                meta.fullname, current_version, release.version, release.description or ""),
-            dismiss_callback = function()
-                UIManager:show(ConfirmBox:new{
-                    text = T(_("Update to v%1 now?"), release.version),
-                    ok_text = _("Update"),
-                    dismissable = false,
-                    cancel_callback = function()
-                        -- do nothing
-                    end,
-                    ok_callback = function()
-                        if Device.isEmulator() then
-                            UIManager:show(InfoMessage:new{
-                                text = _("Emulator detected.\nUpdates are not applied in the emulator."),
-                            })
-                            return
-                        end
-                        -- Proceed with download and install
-                        Updater._install(plugin_dir, release)
-                    end,
-                })
+        UIManager:show(ConfirmBox:new{
+            text = T(_("Update available\n\nv%1 → v%2"), current_version, release.version),
+            ok_text = _("Update"),
+            ok_callback = function()
+                if Device.isEmulator() then
+                    UIManager:show(InfoMessage:new{
+                        text = _("Emulator detected.\nUpdates are not applied in the emulator."),
+                    })
+                    return
+                end
+                Updater._install(plugin_dir, release)
             end,
         })
     end)
