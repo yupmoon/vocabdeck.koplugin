@@ -878,6 +878,46 @@ function DB.getBookIdByFilepath(filepath)
     end)
 end
 
+function DB.findBookWithCardsByFilepath(filepath, preferred_language, restore_previous)
+    if not filepath or filepath == "" then
+        return nil
+    end
+
+    local previous_language = DB.active_language
+    local languages = {}
+    local seen = {}
+    local function addLanguage(language)
+        language = normalizeSourceLanguage(language)
+        local key = language ~= "" and language or "__legacy__"
+        if not seen[key] then
+            seen[key] = true
+            languages[#languages + 1] = { language = language ~= "" and language or nil }
+        end
+    end
+
+    addLanguage(preferred_language)
+    addLanguage(previous_language)
+    for _, language in ipairs(DB.listLanguages()) do
+        addLanguage(language)
+    end
+    addLanguage(nil)
+
+    for _, entry in ipairs(languages) do
+        DB.setLanguage(entry.language)
+        local book_id = DB.getBookIdByFilepath(filepath)
+        if book_id and (DB.getCardCountForBook(book_id) or 0) > 0 then
+            local found_language = DB.active_language
+            if restore_previous then
+                DB.setLanguage(previous_language)
+            end
+            return book_id, found_language
+        end
+    end
+
+    DB.setLanguage(previous_language)
+    return nil
+end
+
 function DB.listBooks()
     DB.init()
     return withConnection(function(conn)

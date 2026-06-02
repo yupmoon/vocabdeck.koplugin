@@ -15,9 +15,42 @@ local Updater = require("vocabdeck_updater")
 
 local Menu = {}
 
-function Menu.build(plugin, config_error, plugin_version)
-    local has_book = plugin:getDocumentFilePath() ~= nil
+local function hasCurrentBook(plugin)
+    return plugin:getDocumentFilePath() ~= nil
+end
 
+local function currentBookHasCards(plugin)
+    local filepath = plugin:getDocumentFilePath()
+    if not filepath then
+        return false
+    end
+    local book_id = DB.findBookWithCardsByFilepath(filepath, plugin:getDocumentSourceLanguage(), true)
+    return book_id ~= nil
+end
+
+local function getCurrentBookId(plugin)
+    local filepath = plugin:getDocumentFilePath()
+    if not filepath then
+        return nil, _("Open a book first.")
+    end
+
+    local source_language = plugin:getDocumentSourceLanguage()
+    local book_id = DB.findBookWithCardsByFilepath(filepath, source_language)
+    if book_id then
+        return book_id
+    end
+
+    if source_language and source_language ~= "" then
+        DB.setLanguage(source_language)
+    end
+    book_id = DB.getOrCreateBook(plugin:getDocumentTitle(), filepath, source_language)
+    if not book_id then
+        return nil, _("Could not prepare book record.")
+    end
+    return book_id
+end
+
+function Menu.build(plugin, config_error, plugin_version)
     -- Build flat language items directly in the top-level menu.
     local study_items = StudyEntry.buildStudyMenuItems(plugin)
     local items = {}
@@ -46,12 +79,13 @@ function Menu.build(plugin, config_error, plugin_version)
     }
     items[#items + 1] = {
         text = _("Cards for this book"),
-        enabled_func = function() return has_book end,
+        enabled_func = function() return currentBookHasCards(plugin) end,
         callback = function()
-            local filepath = plugin:getDocumentFilePath()
-            if not filepath then return end
-            DB.setLanguage(plugin:getDocumentSourceLanguage())
-            local book_id = DB.getOrCreateBook(plugin:getDocumentTitle(), filepath, plugin:getDocumentSourceLanguage())
+            local book_id, err = getCurrentBookId(plugin)
+            if not book_id then
+                UIManager:show(InfoMessage:new{ text = err or _("Could not open cards for this book."), timeout = 3 })
+                return
+            end
             EditModule.showList(plugin, book_id, plugin:getDocumentTitle())
         end,
     }
@@ -69,12 +103,13 @@ function Menu.build(plugin, config_error, plugin_version)
     items[#items].separator = true
     items[#items + 1] = {
         text = _("Fetch missing info (this book)"),
-        enabled_func = function() return has_book end,
+        enabled_func = function() return currentBookHasCards(plugin) end,
         callback = function()
-            local filepath = plugin:getDocumentFilePath()
-            if not filepath then return end
-            DB.setLanguage(plugin:getDocumentSourceLanguage())
-            local book_id = DB.getOrCreateBook(plugin:getDocumentTitle(), filepath, plugin:getDocumentSourceLanguage())
+            local book_id, err = getCurrentBookId(plugin)
+            if not book_id then
+                UIManager:show(InfoMessage:new{ text = err or _("Could not prepare book record."), timeout = 3 })
+                return
+            end
             plugin:bulkFetchMissing(book_id)
         end,
     }
@@ -88,7 +123,7 @@ function Menu.build(plugin, config_error, plugin_version)
             local sub_items = SettingsModule.buildMenuItems(plugin, touchmenu_instance)
             table.insert(sub_items, 1, {
                 text = _("Import from Vocabulary Builder"),
-                enabled_func = function() return has_book end,
+                enabled_func = function() return hasCurrentBook(plugin) end,
                 callback = function()
                     Importer.showImportDialog(plugin)
                 end,
