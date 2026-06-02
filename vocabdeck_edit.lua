@@ -828,14 +828,14 @@ local SORT_LABELS = {
     added = _("added time"),
 }
 
-local SORT_ORDER = { "due", "alphabet", "edited", "added" }
+local SORT_ORDER = { "added", "due", "alphabet", "edited" }
 
 local SORT_DIR_LABELS = {
     asc = _("ascending"),
     desc = _("descending"),
 }
 
-local SORT_DIR_ORDER = { "asc", "desc" }
+local SORT_DIR_ORDER = { "desc", "asc" }
 
 local function normalizeSortBy(value)
     return SORT_LABELS[value] and value or "added"
@@ -1375,9 +1375,7 @@ function VocabDeckCardList:showActionsDialog()
         end,
     }
     item_table[#item_table + 1] = {
-        text = string.format(_("Sort: %s, %s"),
-            SORT_LABELS[self.sort_by] or SORT_LABELS.added,
-            SORT_DIR_LABELS[self.sort_dir] or SORT_DIR_LABELS.desc),
+        text = _("Sort"),
         callback = function()
             self:showSortDialog()
         end,
@@ -1642,13 +1640,48 @@ end
 
 local DEFAULT_SORT_BY = "added"
 local DEFAULT_SORT_DIR = "desc"
-local SORT_DIR_SYMBOLS = { asc = "↑", desc = "↓" }
+
+local SORT_BY_MENU_LABELS = {
+    added = _("Added time"),
+    due = _("Due time"),
+    alphabet = _("Alphabet"),
+    edited = _("Edited time"),
+}
+
+local SORT_STATE_LABELS = {
+    added = {
+        asc = _("Oldest added"),
+        desc = _("Newest added"),
+    },
+    due = {
+        asc = _("Due soonest"),
+        desc = _("Due latest"),
+    },
+    alphabet = {
+        asc = _("A to Z"),
+        desc = _("Z to A"),
+    },
+    edited = {
+        asc = _("Oldest edited"),
+        desc = _("Recently edited"),
+    },
+}
+
+local function currentSortLabel(sort_by, sort_dir)
+    sort_by = normalizeSortBy(sort_by)
+    sort_dir = normalizeSortDir(sort_dir)
+    return SORT_STATE_LABELS[sort_by][sort_dir]
+end
 
 function VocabDeckCardList:showSortDialog()
     local dialog
     local function applySort(sort_by, sort_dir)
-        self.sort_by = sort_by or self.sort_by
-        self.sort_dir = sort_dir or self.sort_dir
+        self.sort_by = normalizeSortBy(sort_by or self.sort_by)
+        self.sort_dir = normalizeSortDir(sort_dir or self.sort_dir)
+        if self.plugin and self.plugin.saveSetting then
+            self.plugin:saveSetting("card_list_sort", self.sort_by)
+            self.plugin:saveSetting("card_list_sort_dir", self.sort_dir)
+        end
         if dialog then
             UIManager:close(dialog)
         end
@@ -1656,28 +1689,48 @@ function VocabDeckCardList:showSortDialog()
         self:reloadItems()
         self:showSortDialog()
     end
+    local function clearSort()
+        applySort(DEFAULT_SORT_BY, DEFAULT_SORT_DIR)
+    end
 
     local buttons = {}
-    for __, sort_dir in ipairs(SORT_DIR_ORDER) do
-        local selected = self.sort_dir == sort_dir
-        buttons[#buttons + 1] = { {
-            text = string.format("%s %s", selected and "[x]" or "[ ]", SORT_DIR_LABELS[sort_dir]),
-            enabled = not selected,
-            callback = function()
-                applySort(self.sort_by, sort_dir)
-            end,
-        } }
-    end
+    buttons[#buttons + 1] = { {
+        text = string.format(_("Current: %s"), currentSortLabel(self.sort_by, self.sort_dir)),
+        enabled = false,
+    } }
+    buttons[#buttons + 1] = { {
+        text = _("Sort"),
+        enabled = false,
+    } }
     for __, sort_by in ipairs(SORT_ORDER) do
         local selected = self.sort_by == sort_by
         buttons[#buttons + 1] = { {
-            text = string.format("%s %s", selected and "[x]" or "[ ]", SORT_LABELS[sort_by]),
+            text = string.format("%s %s", selected and "✓" or " ", SORT_BY_MENU_LABELS[sort_by]),
             enabled = not selected,
             callback = function()
                 applySort(sort_by, self.sort_dir)
             end,
         } }
     end
+    buttons[#buttons + 1] = { {
+        text = _("Order"),
+        enabled = false,
+    } }
+    for __, sort_dir in ipairs(SORT_DIR_ORDER) do
+        local selected = self.sort_dir == sort_dir
+        buttons[#buttons + 1] = { {
+            text = string.format("%s %s", selected and "✓" or " ", currentSortLabel(self.sort_by, sort_dir)),
+            enabled = not selected,
+            callback = function()
+                applySort(self.sort_by, sort_dir)
+            end,
+        } }
+    end
+    buttons[#buttons + 1] = { {
+        text = _("Clear sort order"),
+        enabled = not isDefaultSort(self.sort_by, self.sort_dir),
+        callback = clearSort,
+    } }
     buttons[#buttons + 1] = { {
         text = _("Close"),
         callback = function()
@@ -1843,12 +1896,18 @@ end
 -- @param book_id  nil = all books
 -- @param title    string shown in the title bar
 function Edit.showList(plugin, book_id, title)
+    local sort_by = DEFAULT_SORT_BY
+    local sort_dir = DEFAULT_SORT_DIR
+    if book_id and plugin and plugin.readSetting then
+        sort_by = plugin:readSetting("card_list_sort", DEFAULT_SORT_BY)
+        sort_dir = plugin:readSetting("card_list_sort_dir", DEFAULT_SORT_DIR)
+    end
     UIManager:show(VocabDeckCardList:new{
         title = title or _("VocabDeck cards"),
         plugin = plugin,
         book_id = book_id,
-        sort_by = DEFAULT_SORT_BY,
-        sort_dir = DEFAULT_SORT_DIR,
+        sort_by = normalizeSortBy(sort_by),
+        sort_dir = normalizeSortDir(sort_dir),
     })
 end
 
