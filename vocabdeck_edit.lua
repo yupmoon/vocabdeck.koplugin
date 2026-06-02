@@ -1356,6 +1356,7 @@ function VocabDeckCardList:goToPage(page)
 end
 
 function VocabDeckCardList:showActionsDialog()
+    local menu
     local item_table = {}
 
     item_table[#item_table + 1] = {
@@ -1421,63 +1422,72 @@ function VocabDeckCardList:showActionsDialog()
             self:reloadItems()
         end,
     }
+    item_table[#item_table + 1] = {
+        text = _("Close"),
+        callback = function()
+            UIManager:close(menu)
+        end,
+    }
 
-    UIManager:show(Menu:new{
+    menu = Menu:new{
         title = _("Actions"),
         item_table = item_table,
         covers_fullscreen = false,
         width = math.floor(Screen:getWidth() * 0.7),
-    })
+    }
+    UIManager:show(menu)
 end
 
 function VocabDeckCardList:showWordTypeFilterDialog()
-    local dialog
-    local buttons = {}
+    local menu
+    local items = {}
     local book_id = self.filter_book_id or self.book_id
     local word_types = DB.listWordTypes(book_id)
 
     local function setWordType(word_type)
         self.filter_word_type = word_type or ""
-        if dialog then UIManager:close(dialog) end
+        if menu then UIManager:close(menu) end
         self.show_page = 1
         self:reloadItems()
     end
 
     for _, word_type in ipairs(word_types) do
-        buttons[#buttons + 1] = { {
+        items[#items + 1] = {
             text = word_type,
             enabled = self.filter_word_type ~= word_type,
             callback = function()
                 setWordType(word_type)
             end,
-        } }
+        }
     end
-    if #buttons == 0 then
-        buttons[#buttons + 1] = { {
+    if #items == 0 then
+        items[#items + 1] = {
             text = _("No word types yet"),
             enabled = false,
-        } }
+        }
     end
-    buttons[#buttons + 1] = { {
+    items[#items + 1] = {
         text = _("Clear word type"),
         enabled = (self.filter_word_type or "") ~= "",
         callback = function()
             setWordType("")
         end,
-    } }
-    buttons[#buttons + 1] = { {
+    }
+    items[#items + 1] = {
         text = _("Back"),
         callback = function()
-            UIManager:close(dialog)
+            UIManager:close(menu)
             self:showActionsDialog()
         end,
-    } }
-
-    dialog = ButtonDialog:new{
-        title = _("Word type"),
-        buttons = buttons,
     }
-    UIManager:show(dialog)
+
+    menu = Menu:new{
+        title = _("Word type"),
+        item_table = items,
+        covers_fullscreen = false,
+        width = math.floor(Screen:getWidth() * 0.7),
+    }
+    UIManager:show(menu)
 end
 
 function VocabDeckCardList:showSourceLanguageFilterDialog()
@@ -1674,7 +1684,7 @@ local function currentSortLabel(sort_by, sort_dir)
 end
 
 function VocabDeckCardList:showSortDialog()
-    local dialog
+    local menu
     local function applySort(sort_by, sort_dir)
         self.sort_by = normalizeSortBy(sort_by or self.sort_by)
         self.sort_dir = normalizeSortDir(sort_dir or self.sort_dir)
@@ -1682,8 +1692,8 @@ function VocabDeckCardList:showSortDialog()
             self.plugin:saveSetting("card_list_sort", self.sort_by)
             self.plugin:saveSetting("card_list_sort_dir", self.sort_dir)
         end
-        if dialog then
-            UIManager:close(dialog)
+        if menu then
+            UIManager:close(menu)
         end
         self.show_page = 1
         self:reloadItems()
@@ -1693,56 +1703,58 @@ function VocabDeckCardList:showSortDialog()
         applySort(DEFAULT_SORT_BY, DEFAULT_SORT_DIR)
     end
 
-    local buttons = {}
-    buttons[#buttons + 1] = { {
+    local items = {}
+    items[#items + 1] = {
         text = string.format(_("Current: %s"), currentSortLabel(self.sort_by, self.sort_dir)),
         enabled = false,
-    } }
-    buttons[#buttons + 1] = { {
+    }
+    items[#items + 1] = {
         text = _("Sort"),
         enabled = false,
-    } }
+    }
     for __, sort_by in ipairs(SORT_ORDER) do
         local selected = self.sort_by == sort_by
-        buttons[#buttons + 1] = { {
+        items[#items + 1] = {
             text = string.format("%s %s", selected and "✓" or " ", SORT_BY_MENU_LABELS[sort_by]),
             enabled = not selected,
             callback = function()
                 applySort(sort_by, self.sort_dir)
             end,
-        } }
+        }
     end
-    buttons[#buttons + 1] = { {
+    items[#items + 1] = {
         text = _("Order"),
         enabled = false,
-    } }
+    }
     for __, sort_dir in ipairs(SORT_DIR_ORDER) do
         local selected = self.sort_dir == sort_dir
-        buttons[#buttons + 1] = { {
+        items[#items + 1] = {
             text = string.format("%s %s", selected and "✓" or " ", currentSortLabel(self.sort_by, sort_dir)),
             enabled = not selected,
             callback = function()
                 applySort(self.sort_by, sort_dir)
             end,
-        } }
+        }
     end
-    buttons[#buttons + 1] = { {
+    items[#items + 1] = {
         text = _("Clear sort order"),
         enabled = not isDefaultSort(self.sort_by, self.sort_dir),
         callback = clearSort,
-    } }
-    buttons[#buttons + 1] = { {
+    }
+    items[#items + 1] = {
         text = _("Close"),
         callback = function()
-            UIManager:close(dialog)
+            UIManager:close(menu)
         end,
-    } }
-
-    dialog = ButtonDialog:new{
-        title = _("Sort"),
-        buttons = buttons,
     }
-    UIManager:show(dialog)
+
+    menu = Menu:new{
+        title = _("Sort"),
+        item_table = items,
+        covers_fullscreen = false,
+        width = math.floor(Screen:getWidth() * 0.7),
+    }
+    UIManager:show(menu)
 end
 
 function VocabDeckCardList:onShowMenu()
