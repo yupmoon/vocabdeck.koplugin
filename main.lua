@@ -23,6 +23,7 @@ local Config = require("vocabdeck_config")
 local Context = require("vocabdeck_context")
 local Add = require("vocabdeck_add")
 local Define = require("vocabdeck_define")
+local Grammar = require("vocabdeck_grammar")
 local StudyEntry = require("vocabdeck_study_entry")
 
 local SETTINGS_FILE = DataStorage:getSettingsDir() .. "/vocabdeck.lua"
@@ -43,6 +44,7 @@ local VocabDeck = InputContainer:extend{
 Context.install(VocabDeck)
 Add.install(VocabDeck)
 Define.install(VocabDeck)
+Grammar.install(VocabDeck)
 StudyEntry.install(VocabDeck)
 
 function VocabDeck:readSetting(key, default)
@@ -192,6 +194,14 @@ function VocabDeck:onReaderReady()
                 text = _("Define (VD)"),
                 callback = function()
                     self:defineFromHighlight(reader_highlight)
+                end,
+            }
+        end)
+        self.ui.highlight:addToHighlightDialog("vocabdeck_grammar", function(reader_highlight)
+            return {
+                text = _("Grammar (VD)"),
+                callback = function()
+                    self:grammarFromHighlight(reader_highlight)
                 end,
             }
         end)

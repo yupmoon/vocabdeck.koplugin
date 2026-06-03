@@ -568,6 +568,19 @@ function Settings.buildMenuItems(plugin, default_touchmenu_instance)
             end,
         },
         {
+            text = _("Grammar helper"),
+            checked_func = function()
+                return readBool(plugin, "grammar_helper_enabled", false)
+            end,
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                local current = readBool(plugin, "grammar_helper_enabled", false)
+                plugin.settings:saveSetting("grammar_helper_enabled", not current)
+                plugin.settings:flush()
+                refreshMenu(touchmenu_instance)
+            end,
+        },
+        {
             text = _("Backup and recover"),
             sub_item_table_func = makeBackupItems,
         },
