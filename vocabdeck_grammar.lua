@@ -33,6 +33,10 @@ Then pick the single most notable or interesting grammar point. Explain:
 - Why it is used here in this specific sentence
 - 1-2 short similar examples in the source language
 Label this section "Grammar:".
+Use a numbered list for grammar points. Put one blank line between numbered items, like:
+1. First point
+
+2. Second point
 
 If the selected text has no notable grammar (e.g. a single common noun like "gato"),
 briefly state that and move on -- do not invent grammar where there is none.
@@ -54,6 +58,10 @@ Then explain ALL grammar points present in the selected text. For each point, co
 - Why it is used in this specific sentence
 - 1-2 similar examples in the source language
 Label this section "Grammar:".
+Use a numbered list for grammar points. Put one blank line between numbered items, like:
+1. First point
+
+2. Second point
 
 Organize by importance. Consider these categories where relevant:
 - Sentence structure and word order
@@ -67,7 +75,6 @@ If the selected text has no notable grammar (e.g. a single common noun),
 briefly state that and move on -- do not invent grammar where there is none.
 
 Write explanations in the explanation language. Write examples in the source language.
-Separate each grammar point with a blank line.
 Keep the tone helpful and direct -- like a friend explaining grammar, not a textbook.
 ]]
 
@@ -98,7 +105,10 @@ local function buildUserPrompt(params, source_language, target_language)
 end
 
 local function cleanResult(text)
-    text = Capture.cleanText(text or "")
+    text = tostring(text or ""):gsub("\r\n", "\n"):gsub("\r", "\n")
+    text = text:gsub("\n%s*\n+", "\nVD_GRAMMAR_PARAGRAPH_BREAK\n")
+    text = Capture.cleanText(text)
+    text = text:gsub("\n?VD_GRAMMAR_PARAGRAPH_BREAK\n?", "\n\n")
     text = text:gsub("^#+%s*", "")
     return text:gsub("^%s+", ""):gsub("%s+$", "")
 end
@@ -177,9 +187,10 @@ function Grammar.explainGrammar(plugin, params, detailed, on_success)
     local source_language = params and params.source_language or ""
 
     AIRunner.run(plugin, {
-        message = _("Analyzing grammar... Tap outside to cancel."),
+        message = _("Grammar... tap outside to cancel"),
         phrase = params and params.phrase,
         work = function(trap)
+            local anchored = Capture.anchorInfoMessageBottomLeft(trap)
             if not plugin.querier or not plugin.querier.query then
                 return nil, _("VocabDeck AI provider is not configured.")
             end
@@ -193,7 +204,7 @@ function Grammar.explainGrammar(plugin, params, detailed, on_success)
                     content = buildUserPrompt(params, source_language, target_language),
                 },
             }
-            return plugin.querier:query(messages, trap)
+            return plugin.querier:query(messages, anchored)
         end,
         on_success = function(result)
             result = cleanResult(result)
