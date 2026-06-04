@@ -85,6 +85,32 @@ local function currentSortLabel(sort_by, sort_dir)
     return SORT_STATE_LABELS[sort_by][sort_dir]
 end
 
+local function hasAnyFilter(self)
+    return (self.filter_word_type or "") ~= ""
+        or (self.filter_source_language or "") ~= ""
+        or (self.filter_text or "") ~= ""
+        or self.filter_ai_status
+        or self.filter_flagged
+        or self.filter_not_started
+        or self.filter_learning
+        or self.filter_learned
+        or self.filter_book_id ~= nil
+end
+
+local function clearFilters(self)
+    self.filter_word_type = ""
+    self.filter_source_language = ""
+    self.filter_text = ""
+    self.filter_ai_status = false
+    self.filter_flagged = false
+    self.filter_not_started = false
+    self.filter_learning = false
+    self.filter_learned = false
+    self.filter_book_id = nil
+    self.show_page = 1
+    self:reloadItems()
+end
+
 function Filters.showActionsDialog(self)
     local menu
     local item_table = {}
@@ -141,15 +167,9 @@ function Filters.showActionsDialog(self)
     }
     item_table[#item_table + 1] = {
         text = _("Clear filters"),
-        enabled = (self.filter_word_type or "") ~= ""
-            or (self.filter_text or "") ~= ""
-            or self.filter_ai_status,
+        enabled = hasAnyFilter(self),
         callback = function()
-            self.filter_word_type = ""
-            self.filter_text = ""
-            self.filter_ai_status = false
-            self.show_page = 1
-            self:reloadItems()
+            clearFilters(self)
         end,
     }
     item_table[#item_table + 1] = {

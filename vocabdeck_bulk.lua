@@ -8,6 +8,7 @@ local InfoMessage = require("ui/widget/infomessage")
 local UIManager = require("ui/uimanager")
 local Trapper = require("ui/trapper")
 
+local AIRunner = require("vocabdeck_ai_runner")
 local DB = require("vocabdeck_db")
 local Enrich = require("vocabdeck_enrich")
 
@@ -17,7 +18,7 @@ function Bulk.fetchMissing(plugin, book_id, on_finished)
     local provider_ok, provider_err = plugin:ensureAIProviderLoaded()
     if not provider_ok then
         UIManager:show(InfoMessage:new{
-            text = provider_err,
+            text = AIRunner.formatError(provider_err),
             timeout = 4,
         })
         if on_finished then on_finished(0, 0) end

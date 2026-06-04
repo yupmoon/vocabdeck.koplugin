@@ -224,7 +224,7 @@ function Grammar.explainGrammar(plugin, params, detailed, on_success)
         end,
         on_error = function(err)
             UIManager:show(InfoMessage:new{
-                text = string.format(_("Grammar fetch failed:\n%s"), err or _("Unknown error")),
+                text = AIRunner.formatError(err or _("Unknown error")),
                 timeout = 4,
             })
         end,

@@ -169,6 +169,23 @@ local function parseMetaVersion(meta_file)
     return content:match("version%s*=%s*['\"]([^'\"]+)['\"]")
 end
 
+local function verifyArchiveFile(archive_file)
+    local attr = lfs.attributes(archive_file)
+    if not attr or not attr.size or attr.size < 128 then
+        return false, "downloaded archive is empty or too small"
+    end
+    local f = io.open(archive_file, "rb")
+    if not f then
+        return false, "could not open downloaded archive"
+    end
+    local magic = f:read(4) or ""
+    f:close()
+    if magic ~= "PK\003\004" and magic ~= "PK\005\006" and magic ~= "PK\007\008" then
+        return false, "downloaded file is not a ZIP archive"
+    end
+    return true
+end
+
 -- ── Public API ──────────────────────────────────────────────────────────────
 
 local CHECK_INTERVAL = 3600  -- seconds between network checks (1 hour)
@@ -345,6 +362,16 @@ function Updater._install(plugin_dir, release)
             UIManager:show(InfoMessage:new{
                 text = T(_("Failed to download update.\n\n%1"), err or _("Unknown error")),
             })
+            return
+        end
+
+        local archive_ok, archive_err = verifyArchiveFile(archive_file)
+        if not archive_ok then
+            closeMessage(status_msg)
+            UIManager:show(InfoMessage:new{
+                text = T(_("Failed to verify downloaded update.\n\n%1"), archive_err or _("Invalid archive")),
+            })
+            os.remove(archive_file)
             return
         end
 

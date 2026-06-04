@@ -1216,7 +1216,7 @@ function DB.getCard(card_id)
     end)
 end
 
-local function buildCardWhere(book_id, include_enriched_only, reviewable_only, filter_text, now, filter_word_type, filter_source_language, include_known, flagged_only, filter_ai_status)
+local function buildCardWhere(book_id, include_enriched_only, reviewable_only, filter_text, now, filter_word_type, filter_source_language, include_known, flagged_only, filter_ai_status, filter_card_state)
     local clauses = {}
     if not include_known then
         clauses[#clauses + 1] = "known = 0"
@@ -1264,6 +1264,13 @@ local function buildCardWhere(book_id, include_enriched_only, reviewable_only, f
     if filter_ai_status then
         clauses[#clauses + 1] = "ai_status <> " .. DB.STATUS_ENRICHED
     end
+    if filter_card_state == "not_started" then
+        clauses[#clauses + 1] = "review_count = 0"
+    elseif filter_card_state == "learning" then
+        clauses[#clauses + 1] = "fsrs_state = 1"
+    elseif filter_card_state == "learned" then
+        clauses[#clauses + 1] = "known <> 0"
+    end
     if #clauses == 0 then
         return ""
     end
@@ -1294,18 +1301,18 @@ local function cardSortOrder(sort_by, sort_dir)
     return orders[sort_dir == "asc" and "asc" or "desc"]
 end
 
-function DB.countCards(book_id, include_enriched_only, reviewable_only, filter_text, now, filter_word_type, filter_source_language, include_known, flagged_only, filter_ai_status)
+function DB.countCards(book_id, include_enriched_only, reviewable_only, filter_text, now, filter_word_type, filter_source_language, include_known, flagged_only, filter_ai_status, filter_card_state)
     DB.init()
     return withConnection(function(conn)
-        local where = buildCardWhere(book_id, include_enriched_only, reviewable_only, filter_text, now, filter_word_type, filter_source_language, include_known, flagged_only, filter_ai_status)
+        local where = buildCardWhere(book_id, include_enriched_only, reviewable_only, filter_text, now, filter_word_type, filter_source_language, include_known, flagged_only, filter_ai_status, filter_card_state)
         return tonumber(conn:rowexec("SELECT COUNT(*) FROM cards" .. where .. ";")) or 0
     end)
 end
 
-function DB.listCardsPage(book_id, include_enriched_only, reviewable_only, filter_text, limit, offset, now, sort_by, sort_dir, filter_word_type, filter_source_language, include_known, flagged_only, filter_ai_status)
+function DB.listCardsPage(book_id, include_enriched_only, reviewable_only, filter_text, limit, offset, now, sort_by, sort_dir, filter_word_type, filter_source_language, include_known, flagged_only, filter_ai_status, filter_card_state)
     DB.init()
     return withConnection(function(conn)
-        local where = buildCardWhere(book_id, include_enriched_only, reviewable_only, filter_text, now, filter_word_type, filter_source_language, include_known, flagged_only, filter_ai_status)
+        local where = buildCardWhere(book_id, include_enriched_only, reviewable_only, filter_text, now, filter_word_type, filter_source_language, include_known, flagged_only, filter_ai_status, filter_card_state)
         local sql = string.format("SELECT %s FROM cards%s ORDER BY %s LIMIT %d OFFSET %d;",
             CARD_SELECT_COLUMNS, where, cardSortOrder(sort_by, sort_dir), tonumber(limit) or 20, tonumber(offset) or 0)
         return fetchList(conn, sql)

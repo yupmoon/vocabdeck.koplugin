@@ -22,6 +22,52 @@ local _ = require("gettext")
 
 local AIRunner = {}
 
+local function classifyError(err)
+    local raw = tostring(err or "")
+    local lower = raw:lower()
+    local title
+    local hint
+
+    if raw == "NETWORK_ERROR" or lower:find("network error", 1, true)
+        or lower:find("failed to connect", 1, true)
+        or lower:find("host not found", 1, true) then
+        title = _("Network connection failed.")
+        hint = _("Check Wi-Fi and the provider base URL.")
+    elseif lower:find("timed out", 1, true) or lower:find("timeout", 1, true)
+        or lower:find("interrupted", 1, true) then
+        title = _("AI request timed out.")
+        hint = _("Try again, or choose a smaller/faster model.")
+    elseif lower:find("missing api key", 1, true) or lower:find("missing key", 1, true) then
+        title = _("AI API key is missing.")
+        hint = _("Add an API key in VocabDeck settings or configuration.")
+    elseif raw:find("401", 1, true) or raw:find("403", 1, true)
+        or lower:find("unauthorized", 1, true)
+        or lower:find("forbidden", 1, true)
+        or lower:find("invalid api key", 1, true) then
+        title = _("AI authentication failed.")
+        hint = _("Check the selected provider and API key.")
+    elseif raw:find("429", 1, true) or lower:find("rate limit", 1, true)
+        or lower:find("quota", 1, true) then
+        title = _("AI provider rate limit reached.")
+        hint = _("Wait a moment, then try again.")
+    elseif lower:find("parse", 1, true) or lower:find("invalid json", 1, true)
+        or lower:find("unexpected response", 1, true) then
+        title = _("AI response could not be read.")
+        hint = _("Try again, or use another model/provider.")
+    else
+        title = _("AI fetch failed.")
+    end
+
+    if hint then
+        return string.format("%s\n%s\n\n%s", title, hint, raw)
+    end
+    return string.format("%s\n%s", title, raw)
+end
+
+function AIRunner.formatError(err)
+    return classifyError(err)
+end
+
 -- Ensure the AI provider is loaded. Returns true on success, or shows an
 -- error message and returns false + the error string.
 local function ensureProvider(plugin)
@@ -35,10 +81,7 @@ local function ensureProvider(plugin)
     local ok, err = plugin:ensureAIProviderLoaded()
     if not ok then
         UIManager:show(InfoMessage:new{
-            text = string.format(
-                _("AI fetch failed:\n%s"),
-                err or _("VocabDeck AI provider is not configured.")
-            ),
+            text = classifyError(err or _("VocabDeck AI provider is not configured.")),
             timeout = 4,
         })
         return false, err
@@ -109,10 +152,7 @@ function AIRunner.run(plugin, opts)
                     opts.on_error(err or _("Unknown error"))
                 else
                     UIManager:show(InfoMessage:new{
-                        text = string.format(
-                            _("AI fetch failed:\n%s"),
-                            err or _("Unknown error")
-                        ),
+                        text = classifyError(err or _("Unknown error")),
                         timeout = 4,
                     })
                 end

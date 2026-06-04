@@ -129,10 +129,7 @@ function Define.install(VocabDeck)
                 }, anchored)
             end,
             on_error = function(define_err)
-                self:_showDefineFailure(params, string.format(
-                    _("Could not fetch a definition:\n%s"),
-                    define_err or _("Unknown error")
-                ))
+                self:_showDefineFailure(params, AIRunner.formatError(define_err or _("Unknown error")))
             end,
             on_success = function(result)
                 result.meaning = Capture.cleanMeaning(result.meaning or "")

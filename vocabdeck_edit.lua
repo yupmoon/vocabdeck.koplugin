@@ -108,12 +108,34 @@ function VocabDeckCardList:getTitle()
     if self.filter_ai_status then
         title = string.format("%s  [%s]", title, _("not enriched"))
     end
+    if self.filter_not_started then
+        title = string.format("%s  [%s]", title, _("not started"))
+    elseif self.filter_learning then
+        title = string.format("%s  [%s]", title, _("learning"))
+    elseif self.filter_learned then
+        title = string.format("%s  [%s]", title, _("learned"))
+    end
     if not Filters.isDefaultSort(self.sort_by, self.sort_dir) then
         local sort_label, dir_label = Filters.getTitleSortLabel(self.sort_by, self.sort_dir)
         title = string.format("%s  [%s, %s]", title,
             sort_label, dir_label)
     end
     return title
+end
+
+function VocabDeckCardList:getCardStateFilter()
+    if self.filter_not_started then
+        return "not_started"
+    elseif self.filter_learning then
+        return "learning"
+    elseif self.filter_learned then
+        return "learned"
+    end
+    return nil
+end
+
+function VocabDeckCardList:shouldIncludeKnown()
+    return self.show_known or self.filter_learned
 end
 
 -- Re-count total items and recalculate pagination.
@@ -123,14 +145,7 @@ function VocabDeckCardList:_recount()
     local book_id = self.filter_book_id or self.book_id
     self.total_items = DB.countCards(book_id, false, self.reviewable_only,
         self.filter_text, now, self.filter_word_type, self.filter_source_language,
-        self.show_known, self.filter_flagged, self.filter_ai_status)
-    -- Adjust for local state filters not in DB query
-    if self.filter_not_started then
-        self.total_items = DB.countCards(book_id, false, self.reviewable_only,
-            self.filter_text, now, self.filter_word_type, self.filter_source_language,
-            self.show_known, false, self.filter_ai_status)
-        -- Approximate: we can't get exact with review_count=0 from DB
-    end
+        self:shouldIncludeKnown(), self.filter_flagged, self.filter_ai_status, self:getCardStateFilter())
     self.pages = math.ceil(self.total_items / self.items_per_page)
     self.show_page = math.max(1, math.min(math.max(1, self.pages), self.show_page))
 end
@@ -143,34 +158,14 @@ function VocabDeckCardList:_fetchPage()
     local offset = (self.show_page - 1) * self.items_per_page
     return DB.listCardsPage(book_id, false, self.reviewable_only, self.filter_text,
         self.items_per_page, offset, now, self.sort_by, self.sort_dir,
-        self.filter_word_type, self.filter_source_language, self.show_known,
-        self.filter_flagged, self.filter_ai_status)
+        self.filter_word_type, self.filter_source_language, self:shouldIncludeKnown(),
+        self.filter_flagged, self.filter_ai_status, self:getCardStateFilter())
 end
 
 -- Full reload: re-count + fetch page. Used on initial load and filter changes.
 function VocabDeckCardList:loadItems()
     self:_recount()
-    local cards = self:_fetchPage()
-    return self:_applyCardStateFilter(cards)
-end
-
--- Apply local card-state filters (not in DB query)
-function VocabDeckCardList:_applyCardStateFilter(cards)
-    if not cards then return {} end
-    if not self.filter_not_started and not self.filter_learning and not self.filter_learned then
-        return cards
-    end
-    local filtered = {}
-    for _, c in ipairs(cards) do
-        if self.filter_not_started and (c.review_count or 0) == 0 then
-            filtered[#filtered + 1] = c
-        elseif self.filter_learning and (c.fsrs_state or 0) == 1 then
-            filtered[#filtered + 1] = c
-        elseif self.filter_learned and (c.known or 0) ~= 0 then
-            filtered[#filtered + 1] = c
-        end
-    end
-    return filtered
+    return self:_fetchPage()
 end
 
 -- Fetch a single card at the given global 1-based index using the same
@@ -180,8 +175,8 @@ function VocabDeckCardList:fetchCardAtGlobalIndex(global_idx)
     local book_id = self.filter_book_id or self.book_id
     local cards = DB.listCardsPage(book_id, false, self.reviewable_only, self.filter_text,
         1, global_idx - 1, now, self.sort_by, self.sort_dir,
-        self.filter_word_type, self.filter_source_language, self.show_known,
-        self.filter_flagged, self.filter_ai_status)
+        self.filter_word_type, self.filter_source_language, self:shouldIncludeKnown(),
+        self.filter_flagged, self.filter_ai_status, self:getCardStateFilter())
     return cards and cards[1] or nil
 end
 
@@ -258,7 +253,7 @@ function VocabDeckCardList:switchLanguage(language)
     end
     self:setupItemHeight()
     self:_recount()
-    self.item_table = self:_applyCardStateFilter(self:_fetchPage())
+    self.item_table = self:_fetchPage()
     self.show_page = 1
     self:_populateItems()
     self:updateTitleBar()
@@ -583,7 +578,7 @@ end
 function VocabDeckCardList:nextPage()
     if self.show_page < self.pages then
         self.show_page = self.show_page + 1
-        self.item_table = self:_applyCardStateFilter(self:_fetchPage())
+        self.item_table = self:_fetchPage()
         self:_populateItems()
     end
 end
@@ -591,7 +586,7 @@ end
 function VocabDeckCardList:prevPage()
     if self.show_page > 1 then
         self.show_page = self.show_page - 1
-        self.item_table = self:_applyCardStateFilter(self:_fetchPage())
+        self.item_table = self:_fetchPage()
         self:_populateItems()
     end
 end
@@ -599,7 +594,7 @@ end
 function VocabDeckCardList:goToPage(page)
     if not page or self.pages == 0 then return end
     self.show_page = math.max(1, math.min(self.pages, page))
-    self.item_table = self:_applyCardStateFilter(self:_fetchPage())
+    self.item_table = self:_fetchPage()
     self:_populateItems()
 end
 
