@@ -186,6 +186,11 @@ function Grammar.explainGrammar(plugin, params, detailed, on_success)
     end
     local source_language = params and params.source_language or ""
 
+    -- Track whether on_success fired so on_finally knows whether to clear
+    -- the highlight selection. On success the viewer needs it alive for
+    -- "Save as note" and "Close"; on any failure/cancel path we clean up.
+    local completed = false
+
     AIRunner.run(plugin, {
         message = _("Grammar... tap outside to cancel"),
         phrase = params and params.phrase,
@@ -207,6 +212,7 @@ function Grammar.explainGrammar(plugin, params, detailed, on_success)
             return plugin.querier:query(messages, anchored)
         end,
         on_success = function(result)
+            completed = true
             result = cleanResult(result)
             if result == "" then
                 result = _("No notable grammar point found.")
@@ -214,6 +220,17 @@ function Grammar.explainGrammar(plugin, params, detailed, on_success)
             setCached(params, detailed, result)
             if on_success then
                 on_success(result, detailed)
+            end
+        end,
+        on_error = function(err)
+            UIManager:show(InfoMessage:new{
+                text = string.format(_("Grammar fetch failed:\n%s"), err or _("Unknown error")),
+                timeout = 4,
+            })
+        end,
+        on_finally = function()
+            if not completed and params.reader_highlight and type(params.reader_highlight.clear) == "function" then
+                params.reader_highlight:clear()
             end
         end,
     })
