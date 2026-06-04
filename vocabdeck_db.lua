@@ -461,6 +461,7 @@ function DB.init()
         pcall(conn.exec, conn, "ALTER TABLE cards ADD COLUMN moved INTEGER NOT NULL DEFAULT 0;")
     end
     if current_version ~= DB_SCHEMA_VERSION then
+        conn:exec("PRAGMA user_version = " .. DB_SCHEMA_VERSION .. ";")
     end
     conn:close()
     initialized = true
