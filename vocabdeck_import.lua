@@ -73,7 +73,7 @@ local function loadVocabWords(book_title)
 end
 
 -- Import entries belonging to the active book into `book_id`.
-function Importer.importForBook(plugin, book_id, book_title)
+function Importer.importForBook(plugin, book_id, book_title, source_language)
     if not book_id then
         UIManager:show(InfoMessage:new{
             text = _("Cannot import — no book record is available."),
@@ -104,7 +104,9 @@ function Importer.importForBook(plugin, book_id, book_title)
 
     local ai_words = tonumber(plugin.settings:readSetting("ai_context_words", 15)) or 15
     local display_words = tonumber(plugin.settings:readSetting("display_context_words", 15)) or 15
-    local source_language = plugin:resolveSourceLanguage()
+    source_language = plugin:resolveSourceLanguage{
+        source_language = source_language or plugin:getDocumentSourceLanguage(),
+    }
 
     local imported = 0
     local skipped = 0
@@ -147,7 +149,9 @@ function Importer.showImportDialog(plugin)
         })
         return
     end
-    local book_id = DB.getOrCreateBook(book_title, filepath, plugin:getDocumentSourceLanguage())
+    local source_language = plugin:getDocumentSourceLanguage()
+    DB.setLanguage(source_language)
+    local book_id = DB.getOrCreateBook(book_title, filepath, source_language)
     if not book_id then
         UIManager:show(InfoMessage:new{
             text = _("Could not prepare book record."),
@@ -162,7 +166,7 @@ function Importer.showImportDialog(plugin)
         ),
         ok_text = _("Import"),
         ok_callback = function()
-            Importer.importForBook(plugin, book_id, book_title)
+            Importer.importForBook(plugin, book_id, book_title, source_language)
         end,
     })
 end

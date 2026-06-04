@@ -69,11 +69,6 @@ function Menu.build(plugin, config_error, plugin_version)
     items[#items + 1] = {
         text = _("All cards"),
         callback = function()
-            local filepath = plugin:getDocumentFilePath()
-            if filepath then
-                DB.setLanguage(plugin:getDocumentSourceLanguage())
-                DB.getOrCreateBook(plugin:getDocumentTitle(), filepath, plugin:getDocumentSourceLanguage())
-            end
             EditModule.showList(plugin, nil, _("All cards"))
         end,
     }

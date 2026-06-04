@@ -10,7 +10,6 @@ local http = require("socket.http")
 local ltn12 = require("ltn12")
 local socket = require("socket")
 local socketutil = require("socketutil")
-local https = require("ssl.https")
 local Trapper = require("ui/trapper")
 
 local BaseHandler = {
@@ -44,9 +43,6 @@ function BaseHandler:query(message_history, provider_setting)
 end
 
 local function postURLContent(url, headers, body, timeout, maxtime)
-    if string.sub(url, 1, 8) == "https://" then
-        https.cert_verify = false
-    end
     local sink = {}
     socketutil:set_timeout(timeout, maxtime)
     local request = {

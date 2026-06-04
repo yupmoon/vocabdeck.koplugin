@@ -161,6 +161,14 @@ local function safeDecodeJson(body)
     return data
 end
 
+local function parseMetaVersion(meta_file)
+    local f = io.open(meta_file, "rb")
+    if not f then return nil end
+    local content = f:read("*a") or ""
+    f:close()
+    return content:match("version%s*=%s*['\"]([^'\"]+)['\"]")
+end
+
 -- ── Public API ──────────────────────────────────────────────────────────────
 
 local CHECK_INTERVAL = 3600  -- seconds between network checks (1 hour)
@@ -400,8 +408,8 @@ function Updater._install(plugin_dir, release)
             if not lfs.attributes(meta_file) then
                 return false, "no _meta.lua found"
             end
-            local update_meta = dofile(meta_file)
-            if not update_meta or update_meta.version ~= release.version then
+            local update_version = parseMetaVersion(meta_file)
+            if update_version ~= release.version then
                 return false, "version mismatch"
             end
             -- Remember the actual extracted plugin directory
