@@ -1354,9 +1354,13 @@ function DB.listSourceLanguagesWithCards(book_id, include_enriched_only, reviewa
     DB.init()
     return withConnection(function(conn)
         local where = buildCardWhere(book_id, include_enriched_only, reviewable_only, filter_text, now, filter_word_type, nil, include_known, flagged_only)
+        if where == "" then
+            where = " WHERE source_language <> ''"
+        else
+            where = where .. " AND source_language <> ''"
+        end
         local stmt = conn:prepare([[
             SELECT DISTINCT source_language FROM cards ]] .. where .. [[
-            AND source_language <> ''
             ORDER BY source_language COLLATE NOCASE ASC;
         ]])
         local rows = stmt:resultset("hik")
