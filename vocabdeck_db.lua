@@ -600,7 +600,7 @@ function DB.runMigration()
                     fsrs_stability, fsrs_difficulty, last_review, review_count, lapse_count,
                     suspended, leech, leech_notified_at, known, flag, study_more_day,
                     created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);]])
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);]])
             for i = 1, #card_rows[1] do
                 insert_card:clearbind():reset()
                 for j = 1, 32 do
