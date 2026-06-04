@@ -475,6 +475,13 @@ function DB.getBackupPath()
     return currentBackupPath()
 end
 
+function DB.getSchemaVersion()
+    DB.init()
+    return withConnection(function(conn)
+        return tonumber(conn:rowexec("PRAGMA user_version;")) or 0
+    end)
+end
+
 -- Switch the active language. Closes the old connection and re-inits
 -- against the per-language database file. Pass nil or "" to use the
 -- legacy single-file database (for migration).
@@ -1452,6 +1459,26 @@ function DB.getCardCountForSourceLanguage(source_language)
         local source_filter = sourceLanguageFilterSql(source_language)
         local query = "SELECT COUNT(*) FROM cards WHERE 1 = 1" .. source_filter .. ";"
         return tonumber(conn:rowexec(query)) or 0
+    end)
+end
+
+function DB.getLatestAIError()
+    DB.init()
+    return withConnection(function(conn)
+        local stmt = conn:prepare([[
+            SELECT phrase, ai_error, updated_at FROM cards
+            WHERE ai_error <> ''
+            ORDER BY updated_at DESC
+            LIMIT 1;
+        ]])
+        local rows = stmt:resultset("hik")
+        stmt:close()
+        if not rows or not rows[1] or #rows[1] == 0 then return nil end
+        return {
+            phrase = rows[1][1] or "",
+            error = rows[2] and rows[2][1] or "",
+            updated_at = rows[3] and tonumber(rows[3][1]) or nil,
+        }
     end)
 end
 

@@ -64,6 +64,33 @@ local VocabDeckCardList = FocusManager:extend{
     _row_positions = {},
 }
 
+local function hasActiveFilters(self)
+    return (self.filter_text or "") ~= ""
+        or (self.filter_word_type or "") ~= ""
+        or (self.filter_source_language or "") ~= ""
+        or self.filter_ai_status
+        or self.filter_flagged
+        or self.filter_not_started
+        or self.filter_learning
+        or self.filter_learned
+        or self.filter_book_id ~= nil
+end
+
+function VocabDeckCardList:getScopeLabel()
+    if self.book_id then
+        local language = DB.getActiveLanguage()
+        if language and language ~= "" then
+            return string.format(_("Book · %s"), language)
+        end
+        return _("Book")
+    end
+    local language = self.active_language or DB.getActiveLanguage()
+    if language and language ~= "" then
+        return string.format(_("All books · %s"), language)
+    end
+    return _("All books")
+end
+
 function VocabDeckCardList:getTitle()
     local title = self.title
     if self.filter_text and self.filter_text ~= "" then
@@ -472,10 +499,16 @@ function VocabDeckCardList:_populateItems()
         y_offset = y_offset + self.item_height
     end
     if (self.total_items or 0) == 0 then
-        local has_filter = (self.filter_text ~= "")
-            or ((self.filter_word_type or "") ~= "")
-            or ((self.filter_source_language or "") ~= "")
-        local text = has_filter and _("No cards match filter") or _("No cards")
+        local text
+        if hasActiveFilters(self) then
+            text = string.format(_("No cards match filters in %s"), self:getScopeLabel())
+        elseif self.book_id then
+            text = _("No cards for this book")
+        elseif self.active_language then
+            text = string.format(_("No cards in %s"), self.active_language)
+        else
+            text = _("No cards yet")
+        end
         table.insert(self.main_content, VerticalSpan:new{ width = self.item_margin })
         table.insert(self.main_content, Row.buildRowWidget(self.item_width, self.item_height, nil, text,
             false, self))

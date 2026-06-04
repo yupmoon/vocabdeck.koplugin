@@ -9,6 +9,7 @@ local DB = require("vocabdeck_db")
 local SettingsModule = require("vocabdeck_settings")
 local Importer = require("vocabdeck_import")
 local EditModule = require("vocabdeck_edit")
+local Diagnostics = require("vocabdeck_diagnostics")
 local StudyMore = require("vocabdeck_study_more")
 local StudyEntry = require("vocabdeck_study_entry")
 local Updater = require("vocabdeck_updater")
@@ -137,6 +138,12 @@ function Menu.build(plugin, config_error, plugin_version)
         text = _("Check for updates"),
         callback = function()
             Updater.check(plugin, plugin_version)
+        end,
+    }
+    items[#items + 1] = {
+        text = _("Diagnostics"),
+        callback = function()
+            Diagnostics.show(plugin, plugin_version, config_error)
         end,
     }
     items[#items + 1] = {
