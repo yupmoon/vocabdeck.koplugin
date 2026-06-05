@@ -11,6 +11,38 @@ local Enrich = require("vocabdeck_enrich")
 
 local Define = {}
 
+local DEFINE_CACHE_TTL = 300
+local DEFINE_CACHE_MAX = 50
+local define_cache = {}
+
+local function defineCacheKey(phrase)
+    return Capture.cleanText(phrase or ""):lower()
+end
+
+local function defineCacheGet(phrase)
+    local key = defineCacheKey(phrase)
+    local entry = define_cache[key]
+    if entry and os.time() - entry.created_at <= DEFINE_CACHE_TTL then
+        return entry.result
+    end
+    return nil
+end
+
+local function defineCacheSet(phrase, result)
+    local key = defineCacheKey(phrase)
+    if not define_cache[key] then
+        local keys = {}
+        for k in pairs(define_cache) do keys[#keys + 1] = k end
+        if #keys >= DEFINE_CACHE_MAX then
+            table.sort(keys, function(a, b)
+                return (define_cache[a].created_at or 0) < (define_cache[b].created_at or 0)
+            end)
+            define_cache[keys[1]] = nil
+        end
+    end
+    define_cache[key] = { result = result, created_at = os.time() }
+end
+
 function Define.install(VocabDeck)
     function VocabDeck:_showDefineFailure(params, message)
         local viewer
@@ -116,6 +148,13 @@ function Define.install(VocabDeck)
             UIManager:show(InfoMessage:new{ text = err, timeout = 3 })
             return
         end
+
+        local cached = defineCacheGet(params.phrase)
+        if cached then
+            self:_showDefineResult(params, cached)
+            return
+        end
+
         AIRunner.run(self, {
             message = _("Defining... Tap outside to cancel."),
             phrase = params.phrase,
@@ -138,6 +177,7 @@ function Define.install(VocabDeck)
                     self:_showDefineFailure(params, _("VocabDeck did not receive a usable definition."))
                     return
                 end
+                defineCacheSet(params.phrase, result)
                 self:_showDefineResult(params, result)
             end,
         })

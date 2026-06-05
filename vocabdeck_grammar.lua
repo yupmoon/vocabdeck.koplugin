@@ -6,6 +6,7 @@ local UIManager = require("ui/uimanager")
 
 local AIRunner = require("vocabdeck_ai_runner")
 local Capture = require("vocabdeck_capture")
+local Querier = require("vocabdeck_ai")
 
 local Grammar = {}
 
@@ -211,16 +212,10 @@ function Grammar.explainGrammar(plugin, params, detailed, on_success)
             if not plugin.querier or not plugin.querier.query then
                 return nil, _("VocabDeck AI provider is not configured.")
             end
-            local messages = {
-                {
-                    role = "system",
-                    content = buildSystemPrompt(detailed),
-                },
-                {
-                    role = "user",
-                    content = buildUserPrompt(params, source_language, target_language),
-                },
-            }
+            local messages = Querier.buildMessages(
+                buildSystemPrompt(detailed),
+                buildUserPrompt(params, source_language, target_language)
+            )
             return plugin.querier:query(messages, anchored)
         end,
         on_success = function(result)

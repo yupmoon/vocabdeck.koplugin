@@ -144,4 +144,13 @@ function Querier:query(messages, trap_widget)
     return response, err
 end
 
+-- Shared message-pair builder used by all AI callers (enrich, memory_helper,
+-- grammar). Keeps the {role="system",...},{role="user",...} shape in one place.
+function Querier.buildMessages(system_content, user_content)
+    return {
+        { role = "system", content = system_content },
+        { role = "user",   content = user_content   },
+    }
+end
+
 return Querier

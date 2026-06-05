@@ -12,6 +12,7 @@ local UIManager = require("ui/uimanager")
 local AIRunner = require("vocabdeck_ai_runner")
 local Capture = require("vocabdeck_capture")
 local DB = require("vocabdeck_db")
+local Querier = require("vocabdeck_ai")
 
 local MemoryHelper = {}
 
@@ -89,10 +90,7 @@ Example:
 ]], card.phrase or "", source_language ~= "" and source_language or "unknown",
         card.meaning or "", context, target_language, card.user_note or "")
 
-    return {
-        { role = "system", content = system_prompt },
-        { role = "user", content = user_prompt },
-    }
+    return Querier.buildMessages(system_prompt, user_prompt)
 end
 
 function MemoryHelper.showForCard(plugin, card, on_saved)

@@ -10,6 +10,7 @@
 local _ = require("gettext")
 local json = require("json")
 local UIManager = require("ui/uimanager")
+local Querier = require("vocabdeck_ai")
 local InfoMessage = require("ui/widget/infomessage")
 local logger = require("logger")
 
@@ -206,10 +207,7 @@ local function buildMessages(phrase, ai_context, target_language, source_languag
     user_parts[#user_parts + 1] = "Return JSON only."
     local user_prompt = table.concat(user_parts, "\n\n")
 
-    return {
-        { role = "system", content = system_prompt },
-        { role = "user",   content = user_prompt   },
-    }
+    return Querier.buildMessages(system_prompt, user_prompt)
 end
 
 local function isPhrase(text)
