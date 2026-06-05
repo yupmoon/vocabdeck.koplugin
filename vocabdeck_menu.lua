@@ -58,15 +58,14 @@ function Menu.build(plugin, config_error, plugin_version)
     for _, item in ipairs(study_items) do
         items[#items + 1] = item
     end
-    items[#items + 1] = {
-        text = _("Study more"),
-        enabled_func = function()
-            return StudyMore.hasAvailableStudyMore(plugin)
-        end,
-        sub_item_table_func = function()
-            return StudyMore.buildMenuItems(plugin)
-        end,
-    }
+    if StudyMore.hasAvailableStudyMore(plugin) then
+        items[#items + 1] = {
+            text = _("Study more"),
+            sub_item_table_func = function()
+                return StudyMore.buildMenuItems(plugin)
+            end,
+        }
+    end
     items[#items + 1] = {
         text = _("All cards"),
         callback = function()

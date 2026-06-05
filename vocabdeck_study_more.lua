@@ -11,6 +11,8 @@ local DB = require("vocabdeck_db")
 
 local StudyMore = {}
 
+local STUDY_MORE_ENABLED = false  -- freeze: set to true to re-enable
+
 local EXTRA_NEW_KEY = "study_more_extra_new_cards"
 local EXTRA_REVIEW_KEY = "study_more_extra_review_cards"
 local EXTRA_DAY_KEY = "study_more_extra_day"
@@ -74,6 +76,7 @@ local function listSourceLanguages()
 end
 
 function StudyMore.hasAvailableStudyMore(plugin)
+    if not STUDY_MORE_ENABLED then return false end
     if readExtraNew(plugin) <= 0 and readExtraReview(plugin) <= 0 then
         return false
     end
@@ -163,6 +166,7 @@ function StudyMore.buildMenuItems(plugin)
 end
 
 function StudyMore.buildSettingsItems(plugin)
+    if not STUDY_MORE_ENABLED then return {} end
     return {
         {
             text = _("Extra new cards for today"),

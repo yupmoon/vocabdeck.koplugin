@@ -654,8 +654,10 @@ function Settings.buildMenuItems(plugin, default_touchmenu_instance)
                 )
             end,
         },
-        study_more_settings[1],
-        study_more_settings[2],
+        -- Study more frozen — re-enable by uncommenting below and setting
+        -- STUDY_MORE_ENABLED = true in vocabdeck_study_more.lua.
+        -- study_more_settings[1],
+        -- study_more_settings[2],
         {
             text = _("Leech action"),
             text_func = function()
