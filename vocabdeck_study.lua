@@ -40,6 +40,7 @@ local VERTICAL_SPAN_SMALL = rawget(Size.span, "vertical_small")
 local StudyScreen = InputContainer:extend{}
 local LEECH_THRESHOLD = 8
 local UNLEECH_THRESHOLD = 2
+local LEARN_AHEAD_SECONDS = 20 * 60  -- 20 minutes
 
 -- ── Text assembly helpers ────────────────────────────────────────────────
 
@@ -401,7 +402,7 @@ function StudyScreen:updateQueueCounts(require_enriched)
         and (tonumber(self.plugin:readSetting("daily_review_cards_limit", 200)) or 200) or 200
     local ok, counts = pcall(DB.getStudyQueueCounts,
         self.book_id, self.source_language, require_enriched or self:getRequireEnriched(),
-        nil, daily_review_limit, 20 * 60, daily_new_limit, not self.use_daily_override)
+        nil, daily_review_limit, LEARN_AHEAD_SECONDS, daily_new_limit, not self.use_daily_override)
     counts = ok and counts or { new = 0, learning = 0, review = 0 }
     self.show_button:setText(string.format("%d + %d + %d",
         tonumber(counts.new) or 0,
@@ -453,7 +454,7 @@ function StudyScreen:loadNextCard()
         -- Anki-like learn ahead: when there are no normal due cards, keep
         -- short-interval learning cards in the active session instead of
         -- ending the study screen.
-        card = DB.fetchNextLearningAheadCard(self.book_id, nil, 20 * 60, require_enriched,
+        card = DB.fetchNextLearningAheadCard(self.book_id, nil, LEARN_AHEAD_SECONDS, require_enriched,
             self.source_language, self.use_daily_override)
     end
     if not card then
@@ -657,7 +658,7 @@ function StudyScreen:showBookSelection()
             and (tonumber(study.plugin:readSetting("daily_review_cards_limit", 200)) or 200) or 200
         for _, language in ipairs(languages) do
             local ok, counts = pcall(DB.getStudyQueueCounts,
-                nil, language, require_enriched, nil, daily_review_limit, 20 * 60, daily_new_limit,
+                nil, language, require_enriched, nil, daily_review_limit, LEARN_AHEAD_SECONDS, daily_new_limit,
                 not study.use_daily_override)
             local due_count = 0
             if ok and counts then

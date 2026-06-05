@@ -1581,7 +1581,7 @@ end
 -- The cache is invalidated by any write operation (addCard, deleteCard,
 -- updateCardScheduling, etc.) via DB.invalidateSummaryCache().
 
-local SUMMARY_CACHE_TTL = 30 -- seconds
+local SUMMARY_CACHE_TTL = 60 -- seconds
 local _summary_cache = {}    -- key -> { expires_at, value }
 
 function DB.invalidateSummaryCache()

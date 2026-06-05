@@ -288,7 +288,14 @@ function Enrich.enrichCard(plugin, card, trap_widget)
     local settings = plugin.settings
     local target_language = settings:readSetting("target_language", "English") or "English"
 
-    local messages = buildMessages(card.phrase, card.ai_context, target_language, card.source_language)
+    -- Cap context to avoid accidentally sending entire chapters to the AI.
+    local MAX_CONTEXT_SIZE = 10000
+    local ai_context = card.ai_context or ""
+    if #ai_context > MAX_CONTEXT_SIZE then
+        ai_context = ai_context:sub(1, MAX_CONTEXT_SIZE)
+    end
+
+    local messages = buildMessages(card.phrase, ai_context, target_language, card.source_language)
     local response, err = plugin.querier:query(messages, trap_widget)
     if not response then
         return nil, err or _("No response from AI provider.")
