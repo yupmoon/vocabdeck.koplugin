@@ -1747,6 +1747,47 @@ function DB.getSummary(book_id, require_enriched_due)
     return result
 end
 
+-- Return daily review summaries for the last `days` days from review_history.
+-- Each row: { day = "YYYY-MM-DD", total, again, hard, good, easy, cards }
+function DB.getStudyHistory(days)
+    days = math.max(1, tonumber(days) or 7)
+    DB.init()
+    return withConnection(function(conn)
+        local cutoff = os.time() - (days * 86400)
+        local stmt = conn:prepare([[
+            SELECT
+                date(reviewed_at, 'unixepoch') AS day,
+                COUNT(*) AS total,
+                SUM(CASE WHEN rating = 'again' THEN 1 ELSE 0 END) AS again,
+                SUM(CASE WHEN rating = 'hard' THEN 1 ELSE 0 END) AS hard,
+                SUM(CASE WHEN rating = 'good' THEN 1 ELSE 0 END) AS good,
+                SUM(CASE WHEN rating = 'easy' THEN 1 ELSE 0 END) AS easy,
+                COUNT(DISTINCT card_id) AS cards
+            FROM review_history
+            WHERE reviewed_at >= ?
+            GROUP BY day
+            ORDER BY day DESC;
+        ]])
+        stmt:bind(cutoff)
+        local rows = stmt:resultset("hik")
+        stmt:close()
+        if not rows or not rows[1] then return {} end
+        local list = {}
+        for i = 1, #rows[1] do
+            list[#list + 1] = {
+                day = rows[1][i] or "",
+                total = tonumber(rows[2][i]) or 0,
+                again = tonumber(rows[3][i]) or 0,
+                hard = tonumber(rows[4][i]) or 0,
+                good = tonumber(rows[5][i]) or 0,
+                easy = tonumber(rows[6][i]) or 0,
+                cards = tonumber(rows[7][i]) or 0,
+            }
+        end
+        return list
+    end)
+end
+
 function DB.findCardByPhrase(book_id, phrase, exclude_card_id)
     if not book_id or not phrase or phrase == "" then
         return nil

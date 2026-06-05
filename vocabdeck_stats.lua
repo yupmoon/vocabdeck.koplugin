@@ -8,6 +8,7 @@ local TextViewer = require("ui/widget/textviewer")
 local UIManager = require("ui/uimanager")
 
 local StatsData = require("vocabdeck_stats_data")
+local DB = require("vocabdeck_db")
 
 local Stats = {}
 
@@ -145,8 +146,54 @@ function Stats.show(plugin)
         lines[#lines + 1] = string.format(_("Books: %d"), all.books)
     end
 
-    UIManager:show(TextViewer:new{
+    local viewer
+    viewer = TextViewer:new{
         title = _("VocabDeck stats"),
+        text = table.concat(lines, "\n"),
+        buttons_table = {
+            {
+                {
+                    text = _("Study history"),
+                    callback = function()
+                        Stats.showHistory()
+                    end,
+                },
+                {
+                    text = _("Close"),
+                    callback = function()
+                        UIManager:close(viewer)
+                    end,
+                },
+            },
+        },
+        add_default_buttons = false,
+    }
+    UIManager:show(viewer)
+end
+
+function Stats.showHistory()
+    local ok, days = pcall(DB.getStudyHistory, 14)
+    if not ok or not days or #days == 0 then
+        UIManager:show(InfoMessage:new{
+            text = _("No study history yet."),
+            timeout = 3,
+        })
+        return
+    end
+
+    local lines = { _("STUDY HISTORY"), "" }
+    for _, row in ipairs(days) do
+        local bar = string.rep("█", math.floor(row.good / math.max(row.total, 1) * 10 + 0.5))
+            .. string.rep("░", 10 - math.floor(row.good / math.max(row.total, 1) * 10 + 0.5))
+        lines[#lines + 1] = string.format("%s  %3d reviews  %2d cards  %s",
+            row.day, row.total, row.cards, bar)
+        lines[#lines + 1] = string.format("         again %d  hard %d  good %d  easy %d",
+            row.again, row.hard, row.good, row.easy)
+        lines[#lines + 1] = ""
+    end
+
+    UIManager:show(TextViewer:new{
+        title = _("Study history"),
         text = table.concat(lines, "\n"),
     })
 end
