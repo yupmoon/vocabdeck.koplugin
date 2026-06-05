@@ -164,6 +164,8 @@ end
 
 local function normalizePhrase(phrase)
     phrase = tostring(phrase or "")
+    -- Lua 5.1 %s does not match NBSP (U+00A0), so handle it explicitly
+    -- before the general whitespace collapse below.
     phrase = phrase:gsub("\194\160", " ")
     phrase = phrase:gsub("%s+", " ")
     phrase = phrase:gsub("^%s+", ""):gsub("%s+$", "")
@@ -450,14 +452,22 @@ function DB.init()
         updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
         PRIMARY KEY(day, source_language)
     );]])
-    normalizeStoredSourceLanguages(conn)
+    local normalize_ok, normalize_err = pcall(normalizeStoredSourceLanguages, conn)
+    if not normalize_ok then
+        logger.warn("vocabdeck: normalizeStoredSourceLanguages failed:", normalize_err)
+    end
     if hasNormalizedPhraseColumn(conn) then
         pcall(conn.exec, conn, "CREATE INDEX IF NOT EXISTS idx_cards_norm_phrase ON cards(normalized_phrase);")
-        backfillNormalizedPhrases(conn)
+        local backfill_ok, backfill_err = pcall(backfillNormalizedPhrases, conn)
+        if not backfill_ok then
+            logger.warn("vocabdeck: backfillNormalizedPhrases failed:", backfill_err)
+        end
     else
         logger.warn("vocabdeck: normalized_phrase migration did not complete; skipping normalized phrase indexes")
     end
     if current_version < 15 then
+        -- Reserved for future card-move-between-decks tracking.
+        -- Column exists in schema but is not yet wired to any UI or logic.
         pcall(conn.exec, conn, "ALTER TABLE cards ADD COLUMN moved INTEGER NOT NULL DEFAULT 0;")
     end
     if current_version ~= DB_SCHEMA_VERSION then
@@ -2236,9 +2246,14 @@ function DB.setCardLeech(card_id, leech)
 end
 
 -- Store the count of consecutive successful reviews for a leech card.
--- Uses leech_notified_at column with negative values to distinguish from timestamps:
---   -1 = 1 successful review, -2 = 2 successful reviews, etc.
--- A value of 0 or NULL means no successful reviews yet.
+--
+-- leech_notified_at serves double duty:
+--   Positive value = Unix timestamp of when the card was marked as a leech
+--                    (set by setCardLeech).
+--   Negative value = count of consecutive successful reviews since leeching
+--                     (set by setCardLeechSuccessCount: -1 = 1 review, -2 = 2, etc.)
+--   NULL or 0      = not a leech, or no successful reviews since leeching.
+-- This avoids adding a separate column for a rarely-used counter.
 function DB.setCardLeechSuccessCount(card_id, count)
     if not card_id then return false end
     DB.init()

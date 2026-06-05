@@ -54,66 +54,72 @@ function Querier:loadProvider(provider_name)
         return false, _("AI provider is already being loaded. Please wait.")
     end
     self._loading = true
-    local config = self.plugin and self.plugin.CONFIGURATION
-    if not config then
-        self._loading = false
-        return false, _("VocabDeck configuration file is not loaded.")
-    end
-    local raw_provider_settings = koutil.tableGetValue(config, "provider_settings", provider_name)
-    if not raw_provider_settings then
-        self._loading = false
-        return false, string.format(
-            _("Provider settings not found for: %s. Check vocabdeck_configuration.lua."),
-            tostring(provider_name)
-        )
-    end
-    local provider_settings = copyTable(raw_provider_settings)
-
-    local settings = self.plugin and self.plugin.settings
-    if settings then
-        local saved_model = settings:readSetting("model_" .. provider_name)
-        if saved_model and saved_model ~= "" then
-            provider_settings.model = saved_model
+    -- Wrap body in pcall so _loading is always reset, even if an unexpected
+    -- error (e.g. metatable traps in copyTable) throws mid-function.
+    local ok, result, err_msg = pcall(function()
+        local config = self.plugin and self.plugin.CONFIGURATION
+        if not config then
+            return false, _("VocabDeck configuration file is not loaded.")
         end
-        local saved_api_key = settings:readSetting("api_key_" .. provider_name)
-        if saved_api_key and saved_api_key ~= "" then
-            provider_settings.api_key = saved_api_key
+        local raw_provider_settings = koutil.tableGetValue(config, "provider_settings", provider_name)
+        if not raw_provider_settings then
+            return false, string.format(
+                _("Provider settings not found for: %s. Check vocabdeck_configuration.lua."),
+                tostring(provider_name)
+            )
         end
-    end
-    local file_api_key = ApiKeys.get(provider_name)
-    if file_api_key then
-        provider_settings.api_key = file_api_key
-    end
+        local provider_settings = copyTable(raw_provider_settings)
 
-    local handler_name = provider_settings.handler
-    if not handler_name or handler_name == "" then
-        local underscore_pos = provider_name:find("_")
-        if underscore_pos and underscore_pos > 0 then
-            handler_name = provider_name:sub(1, underscore_pos - 1)
-        else
-            handler_name = provider_name
+        local settings = self.plugin and self.plugin.settings
+        if settings then
+            local saved_model = settings:readSetting("model_" .. provider_name)
+            if saved_model and saved_model ~= "" then
+                provider_settings.model = saved_model
+            end
+            local saved_api_key = settings:readSetting("api_key_" .. provider_name)
+            if saved_api_key and saved_api_key ~= "" then
+                provider_settings.api_key = saved_api_key
+            end
         end
-    end
+        local file_api_key = ApiKeys.get(provider_name)
+        if file_api_key then
+            provider_settings.api_key = file_api_key
+        end
 
-    local ok, handler = pcall(function()
-        return require("vocabdeck_providers." .. handler_name)
+        local handler_name = provider_settings.handler
+        if not handler_name or handler_name == "" then
+            local underscore_pos = provider_name:find("_")
+            if underscore_pos and underscore_pos > 0 then
+                handler_name = provider_name:sub(1, underscore_pos - 1)
+            else
+                handler_name = provider_name
+            end
+        end
+
+        local ok2, handler = pcall(function()
+            return require("vocabdeck_providers." .. handler_name)
+        end)
+        if not ok2 then
+            local err = string.format(
+                _("The handler for %s was not found in vocabdeck_providers/."),
+                handler_name
+            )
+            logger.warn("vocabdeck: " .. err)
+            return false, err
+        end
+
+        self.handler = handler
+        self.handler_name = handler_name
+        self.provider_settings = provider_settings
+        self.provider_name = provider_name
+        return true
     end)
-    if not ok then
-        self._loading = false
-        local err = string.format(
-            _("The handler for %s was not found in vocabdeck_providers/."),
-            handler_name
-        )
-        logger.warn("vocabdeck: " .. err)
-        return false, err
-    end
-
-    self.handler = handler
-    self.handler_name = handler_name
-    self.provider_settings = provider_settings
-    self.provider_name = provider_name
     self._loading = false
-    return true
+    if not ok then
+        logger.warn("vocabdeck: loadProvider panicked: " .. tostring(result))
+        return false, tostring(result)
+    end
+    return result, err_msg
 end
 
 function Querier:getModel()

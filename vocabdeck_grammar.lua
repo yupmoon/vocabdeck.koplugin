@@ -11,6 +11,7 @@ local Grammar = {}
 
 local SETTING_KEY = "grammar_helper_enabled"
 local CACHE_TTL_SECONDS = 300
+local CACHE_MAX_ENTRIES = 50
 local CACHE_VERSION = "grammar-v2"
 local cache = {}
 
@@ -139,6 +140,17 @@ local function setCached(params, detailed, text)
     local key = cacheKey(params)
     local entry = cache[key]
     if not entry or os.time() - entry.created_at > CACHE_TTL_SECONDS then
+        -- Evict oldest entry if at capacity before inserting a new one.
+        if not entry then
+            local keys = {}
+            for k in pairs(cache) do keys[#keys + 1] = k end
+            if #keys >= CACHE_MAX_ENTRIES then
+                table.sort(keys, function(a, b)
+                    return (cache[a].created_at or 0) < (cache[b].created_at or 0)
+                end)
+                cache[keys[1]] = nil
+            end
+        end
         entry = {}
         cache[key] = entry
     end
