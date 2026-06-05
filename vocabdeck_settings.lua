@@ -586,6 +586,19 @@ function Settings.buildMenuItems(plugin, default_touchmenu_instance)
             sub_item_table_func = makeBackupItems,
         },
         {
+            text = _("Show answer timer in study"),
+            checked_func = function()
+                return readBool(plugin, "study_timer_enabled", true)
+            end,
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                local current = readBool(plugin, "study_timer_enabled", true)
+                plugin.settings:saveSetting("study_timer_enabled", not current)
+                plugin.settings:flush()
+                refreshMenu(touchmenu_instance)
+            end,
+        },
+        {
             text = _("Front side fields"),
             mandatory = shortMandatory(CardFields.describeFields(CardFields.getFieldState(plugin, "front"))),
             sub_item_table_func = function()

@@ -41,6 +41,7 @@ local StudyScreen = InputContainer:extend{}
 local LEECH_THRESHOLD = 8
 local UNLEECH_THRESHOLD = 2
 local LEARN_AHEAD_SECONDS = 20 * 60  -- 20 minutes
+local TIMER_ROW_HEIGHT = 20
 
 -- ── Text assembly helpers ────────────────────────────────────────────────
 
@@ -128,9 +129,10 @@ function StudyScreen:init()
     local edit_icon_h = Screen:scaleBySize(32)
     local action_h = Screen:scaleBySize(48)
     local interval_h = Screen:scaleBySize(28)
+    local timer_h = Screen:scaleBySize(TIMER_ROW_HEIGHT)
     local card_width = panel_width - Size.padding.large * 2
     local front_card_height = panel_height - topbar_h - action_h - Size.padding.large * 2
-    local back_card_height = panel_height - topbar_h - action_h - interval_h - Size.padding.large * 2
+    local back_card_height = panel_height - topbar_h - action_h - interval_h - timer_h - Size.padding.large * 2
     local card_height = front_card_height
     local card_inner_width = card_width - Size.padding.large * 2
     local front_card_inner_height = front_card_height - Size.padding.large * 2
@@ -328,9 +330,18 @@ function StudyScreen:init()
             return true
         end
     end
+    self.timer_widget = TextWidget:new{
+        face = Font:getFace("smallinfofont"),
+        text = "",
+    }
+    self.timer_row = CenterContainer:new{
+        dimen = Geom:new{ w = panel_width, h = timer_h },
+        self.timer_widget,
+    }
     local back_panel_content = VerticalGroup:new{
         back_top_bar,
         self.back_card_container,
+        self.timer_row,
         interval_row,
         rating_row,
     }
@@ -486,6 +497,7 @@ function StudyScreen:loadNextCard()
     end
     self.current_card = card
     self.showing_back = false
+    self.timer_start = os.time()
     self:updateTitle()
     self:updateQueueCounts(require_enriched)
     local front_state = CardFields.getFieldState(plugin, "front")
@@ -508,6 +520,12 @@ function StudyScreen:onShowOrNext()
     end
     if not self.showing_back then
         self.showing_back = true
+        self.elapsed = os.time() - (self.timer_start or os.time())
+        if self.timer_widget and self.plugin and self.plugin:readSetting("study_timer_enabled", true) ~= false then
+            self.timer_widget:setText(string.format("\226\143\177 %ds", self.elapsed))
+        else
+            self.timer_widget:setText("")
+        end
         local plugin = self.plugin
         local back_state = CardFields.getFieldState(plugin, "back")
         local show_labels = plugin and plugin:readSetting("show_section_labels", true) and true or false
