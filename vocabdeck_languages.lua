@@ -4,6 +4,8 @@
 -- capture, filters, study decks, and manual cards all agree on names.
 local Languages = {}
 
+local TextUtils = require("vocabdeck_text_utils")
+
 local NAMES = {
     es = "Spanish",
     spa = "Spanish",
@@ -188,12 +190,12 @@ local HINTS = {
 }
 
 function Languages.normalize(language)
-    language = tostring(language or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    language = TextUtils.trim(tostring(language or ""))
     if language == "" then return "" end
     local lowered = language:lower()
     lowered = lowered:gsub("%b()", "")
     lowered = lowered:gsub("%b[]", "")
-    lowered = lowered:gsub("^%s+", ""):gsub("%s+$", "")
+    lowered = TextUtils.trim(lowered)
     local key = lowered:gsub("^([a-z][a-z])[_%-].*$", "%1")
     key = key:gsub("^([a-z][a-z])%s+.*$", "%1")
     return NAMES[key] or NAMES[language:lower()] or language

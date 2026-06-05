@@ -13,6 +13,7 @@ local AIRunner = require("vocabdeck_ai_runner")
 local Capture = require("vocabdeck_capture")
 local DB = require("vocabdeck_db")
 local Querier = require("vocabdeck_ai")
+local TextUtils = require("vocabdeck_text_utils")
 
 local MemoryHelper = {}
 
@@ -24,9 +25,8 @@ local MEMORY_CACHE_TTL = 300 -- 5 minutes
 
 local function cleanText(text)
     text = tostring(text or "")
-    text = text:gsub("^%s+", ""):gsub("%s+$", "")
-    text = text:gsub("\r\n", "\n"):gsub("\r", "\n")
-    text = text:gsub("\n\n\n+", "\n\n")
+    text = TextUtils.trim(text)
+    text = TextUtils.normalizeNewlines(text)
     -- Ensure a blank line between section labels in case the AI omits them.
     text = text:gsub("(Collocations:)", "\n\n%1")
     text = text:gsub("(Memory hook:)", "\n\n%1")
@@ -38,7 +38,7 @@ local function cleanText(text)
     -- label or end-of-string is considered empty and removed entirely.
     text = text:gsub("(Morphology:|Collocations:|Memory hook:|Example:)%s*\n%s*\n", "")
     -- Clean up any leading/trailing whitespace left after stripping.
-    text = text:gsub("^%s+", ""):gsub("%s+$", "")
+    text = TextUtils.trim(text)
     return text
 end
 

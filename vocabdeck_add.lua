@@ -12,6 +12,7 @@ local Capture = require("vocabdeck_capture")
 local Enrich = require("vocabdeck_enrich")
 local ManualAdd = require("vocabdeck_manual_add")
 local AIRunner = require("vocabdeck_ai_runner")
+local TextUtils = require("vocabdeck_text_utils")
 
 local Add = {}
 
@@ -79,7 +80,7 @@ function Add.install(VocabDeck)
                     is_enter_default = true,
                     callback = function()
                         local final_phrase = phrase_dialog:getInputText() or ""
-                        final_phrase = final_phrase:gsub("^%s+", ""):gsub("%s+$", "")
+                        final_phrase = TextUtils.trim(final_phrase)
                         if final_phrase == "" then final_phrase = phrase end
                         if final_phrase ~= phrase and not params.allow_update_existing
                             and self:_hasDuplicate(book_id, final_phrase, source_language) then

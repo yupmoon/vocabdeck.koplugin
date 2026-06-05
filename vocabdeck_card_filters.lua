@@ -3,6 +3,7 @@ local _ = require("gettext")
 
 local ButtonDialog = require("ui/widget/buttondialog")
 local Device = require("device")
+local TextUtils = require("vocabdeck_text_utils")
 local InfoMessage = require("ui/widget/infomessage")
 local InputDialog = require("ui/widget/inputdialog")
 local Menu = require("ui/widget/menu")
@@ -340,7 +341,7 @@ function Filters.showTextFilterDialog(self)
                 background = Blitbuffer.COLOR_WHITE,
                 callback = function()
                     local raw = dialog:getInputText() or ""
-                    raw = raw:gsub("^%s+", ""):gsub("%s+$", "")
+                    raw = TextUtils.trim(raw)
                     closeDialog()
                     self.filter_text = raw
                     self.show_page = 1

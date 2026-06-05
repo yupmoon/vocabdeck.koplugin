@@ -7,6 +7,7 @@ local UIManager = require("ui/uimanager")
 local AIRunner = require("vocabdeck_ai_runner")
 local Capture = require("vocabdeck_capture")
 local Querier = require("vocabdeck_ai")
+local TextUtils = require("vocabdeck_text_utils")
 
 local Grammar = {}
 
@@ -112,7 +113,7 @@ local function cleanResult(text)
     text = Capture.cleanText(text)
     text = text:gsub("\n?VD_GRAMMAR_PARAGRAPH_BREAK\n?", "\n\n")
     text = text:gsub("^#+%s*", "")
-    return text:gsub("^%s+", ""):gsub("%s+$", "")
+    return TextUtils.trim(text)
 end
 
 local function cacheKey(params)

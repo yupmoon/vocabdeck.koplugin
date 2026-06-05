@@ -3,6 +3,7 @@ local _ = require("gettext")
 
 local DB = require("vocabdeck_db")
 local Languages = require("vocabdeck_languages")
+local TextUtils = require("vocabdeck_text_utils")
 
 local Format = {}
 
@@ -14,10 +15,10 @@ function Format.cleanMeaningPreview(meaning)
     if not first_line or not rest then
         return meaning
     end
-    local label = first_line:gsub("^%s+", ""):gsub("%s+$", ""):lower()
+    local label = TextUtils.trim(first_line):lower()
     label = label:gsub("%s*[,;:].*$", "")
     if Languages.GRAMMAR_LABELS[label] then
-        return rest:gsub("^%s+", ""):gsub("%s+$", "")
+        return TextUtils.trim(rest)
     end
     return meaning
 end

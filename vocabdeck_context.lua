@@ -5,6 +5,7 @@ local UIManager = require("ui/uimanager")
 
 local DB = require("vocabdeck_db")
 local Capture = require("vocabdeck_capture")
+local TextUtils = require("vocabdeck_text_utils")
 
 local Context = {}
 
@@ -45,7 +46,7 @@ function Context.install(VocabDeck)
             language = props.languages[1]
         end
         if type(language) ~= "string" then return "" end
-        return language:gsub("^%s+", ""):gsub("%s+$", "")
+        return TextUtils.trim(language)
     end
 
     function VocabDeck:getKnownBookSourceLanguage()

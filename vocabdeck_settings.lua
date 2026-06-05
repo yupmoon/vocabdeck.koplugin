@@ -13,6 +13,7 @@ local ProviderCatalog = require("vocabdeck_provider_catalog")
 local CardFields = require("vocabdeck_card_fields")
 local DB = require("vocabdeck_db")
 local StudyMore = require("vocabdeck_study_more")
+local TextUtils = require("vocabdeck_text_utils")
 
 local Settings = {}
 
@@ -140,7 +141,7 @@ local function showApiKeyInput(plugin, provider)
                 text = _("Save"),
                 is_enter_default = true,
                 callback = function()
-                    local key = (input_dialog:getInputText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
+                    local key = TextUtils.trim(input_dialog:getInputText() or "")
                     closeInputDialog(input_dialog)
                     plugin.settings:saveSetting("api_key_" .. provider, key)
                     plugin.settings:flush()
@@ -205,7 +206,7 @@ local function showTextInput(title, description, current, on_save)
                 text = _("Save"),
                 is_enter_default = true,
                 callback = function()
-                    local text = (input_dialog:getInputText() or ""):gsub("^%s+", ""):gsub("%s+$", "")
+                    local text = TextUtils.trim(input_dialog:getInputText() or "")
                     closeInputDialog(input_dialog)
                     on_save(text)
                 end,

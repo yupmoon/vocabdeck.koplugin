@@ -13,6 +13,7 @@ local UIManager = require("ui/uimanager")
 local Querier = require("vocabdeck_ai")
 local InfoMessage = require("ui/widget/infomessage")
 local logger = require("logger")
+local TextUtils = require("vocabdeck_text_utils")
 
 local DB = require("vocabdeck_db")
 
@@ -76,7 +77,7 @@ function Enrich.buildContextWindows(phrase, prev_ctx, next_ctx, ai_words, displa
         local middle = phrase
         if left ~= "" and not left:match("%s$") then left = left .. " " end
         if right ~= "" and not right:match("^%s") then right = " " .. right end
-        return (left .. middle .. right):gsub("^%s+", ""):gsub("%s+$", "")
+        return TextUtils.trim(left .. middle .. right)
     end
 
     local ai_prev = trimToWords(prev_ctx, ai_words or 0, true)
@@ -114,7 +115,7 @@ function Enrich.extractSentence(phrase, prev_ctx, next_ctx)
         end
     end
     local sentence = full:sub(sent_start, sent_end)
-    sentence = sentence:gsub("^%s+", ""):gsub("%s+$", "")
+    sentence = TextUtils.trim(sentence)
     if sentence == "" or sentence == phrase then return "" end
     return sentence
 end
@@ -217,7 +218,7 @@ end
 -- Strip common code fences before attempting JSON decode.
 local function cleanupResponse(response)
     if type(response) ~= "string" then return "" end
-    local cleaned = response:gsub("^%s+", ""):gsub("%s+$", "")
+    local cleaned = TextUtils.trim(response)
     cleaned = cleaned:gsub("^```%w*%s*", ""):gsub("```%s*$", "")
     -- extract first {...} block if surrounded by prose
     local brace_start = cleaned:find("{")

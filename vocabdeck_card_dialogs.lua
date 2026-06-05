@@ -13,6 +13,7 @@ local UIManager = require("ui/uimanager")
 
 local DB = require("vocabdeck_db")
 local Enrich = require("vocabdeck_enrich")
+local TextUtils = require("vocabdeck_text_utils")
 local Format = require("vocabdeck_card_format")
 local Memory = require("vocabdeck_memory")
 local MemoryHelper = require("vocabdeck_memory_helper")
@@ -266,13 +267,13 @@ function Dialogs.showEditDialog(plugin, card, on_saved)
                     callback = function()
                         local value = dialog:getInputText() or ""
                         if spec.key == "phrase" then
-                            value = value:gsub("^%s+", ""):gsub("%s+$", "")
+                            value = TextUtils.trim(value)
                             if value == "" then
                                 UIManager:show(InfoMessage:new{ text = _("Phrase cannot be empty."), timeout = 3 })
                                 return
                             end
                         end
-                        draft[spec.key] = value:gsub("^%s+", ""):gsub("%s+$", "")
+                        draft[spec.key] = TextUtils.trim(value)
                         closeDialog()
                         if persistFields(false) and edit_menu and edit_menu.updateItems then
                             edit_menu:updateItems()

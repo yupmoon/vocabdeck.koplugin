@@ -7,6 +7,7 @@ local Geom = require("ui/geometry")
 local Size = require("ui/size")
 local Enrich = require("vocabdeck_enrich")
 local Languages = require("vocabdeck_languages")
+local TextUtils = require("vocabdeck_text_utils")
 
 local Capture = {}
 local Screen = Device.screen
@@ -70,7 +71,7 @@ function Capture.cleanText(text)
     text = text:gsub("\r\n", "\n"):gsub("\r", "\n")
     text = text:gsub("[ \t]+", " ")
     text = text:gsub("\n%s*\n+", "\n")
-    return text:gsub("^%s+", ""):gsub("%s+$", "")
+    return TextUtils.trim(text)
 end
 
 function Capture.cleanMeaning(text)
@@ -83,7 +84,7 @@ function Capture.cleanMeaning(text)
     text = text:gsub("^[Aa]nswer%s*:%s*", "")
     text = text:gsub("%*%*(.-)%*%*", "%1")
     text = text:gsub("`(.-)`", "%1")
-    return text:gsub("^%s+", ""):gsub("%s+$", "")
+    return TextUtils.trim(text)
 end
 
 function Capture.splitDictionaryDefinition(definition)
@@ -98,10 +99,10 @@ function Capture.splitDictionaryDefinition(definition)
     if isNoDefinitionText(rest) then
         return "", ""
     end
-    local label = first_line:gsub("^%s+", ""):gsub("%s+$", ""):lower()
+    local label = TextUtils.trim(first_line):lower()
     label = label:gsub("%s*[,;:].*$", "")
     if Languages.GRAMMAR_LABELS[label] then
-        return first_line:gsub("^%s+", ""):gsub("%s+$", ""), Capture.cleanMeaning(rest)
+        return TextUtils.trim(first_line), Capture.cleanMeaning(rest)
     end
     return "", definition
 end

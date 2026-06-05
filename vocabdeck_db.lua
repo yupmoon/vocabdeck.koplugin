@@ -10,6 +10,7 @@ local logger = require("logger")
 local Scheduler = require("vocabdeck_scheduler")
 local Queue = require("vocabdeck_queue")
 local Languages = require("vocabdeck_languages")
+local TextUtils = require("vocabdeck_text_utils")
 
 local DB = {}
 
@@ -168,7 +169,7 @@ local function normalizePhrase(phrase)
     -- before the general whitespace collapse below.
     phrase = phrase:gsub("\194\160", " ")
     phrase = phrase:gsub("%s+", " ")
-    phrase = phrase:gsub("^%s+", ""):gsub("%s+$", "")
+    phrase = TextUtils.trim(phrase)
     return phrase:lower()
 end
 
@@ -220,9 +221,9 @@ local WORD_TYPE_ALIASES = {
 }
 
 local function normalizeWordType(word_type)
-    word_type = tostring(word_type or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    word_type = TextUtils.trim(tostring(word_type or ""))
     if word_type == "" then return "" end
-    local key = word_type:lower():gsub("^%s+", ""):gsub("%s+$", "")
+    local key = TextUtils.trim(word_type:lower())
     key = key:gsub("%s*[,;:].*$", "")
     return WORD_TYPE_NAMES[key] or key
 end
@@ -2005,7 +2006,7 @@ function DB.applyEnrichment(card_id, result)
     if not card_id or not result then return false end
     DB.init()
     return withConnection(function(conn)
-        local headword_value = tostring(result.headword or ""):gsub("^%s+", ""):gsub("%s+$", "")
+        local headword_value = TextUtils.trim(tostring(result.headword or ""))
         local headword = normalizePhrase(headword_value)
         local source_language = normalizeSourceLanguage(result.source_language)
         if headword ~= "" then

@@ -13,6 +13,7 @@ local UIManager = require("ui/uimanager")
 local AIRunner = require("vocabdeck_ai_runner")
 local DB = require("vocabdeck_db")
 local Enrich = require("vocabdeck_enrich")
+local TextUtils = require("vocabdeck_text_utils")
 local Languages = require("vocabdeck_languages")
 
 local ManualAdd = {}
@@ -127,7 +128,7 @@ function ManualAdd.start(plugin, touchmenu_instance)
                 is_enter_default = true,
                 callback = function()
                     local phrase = dialog:getInputText() or ""
-                    phrase = phrase:gsub("^%s+", ""):gsub("%s+$", "")
+                    phrase = TextUtils.trim(phrase)
                     if phrase == "" then
                         UIManager:show(InfoMessage:new{ text = _("Word or phrase cannot be empty."), timeout = 3 })
                         return
