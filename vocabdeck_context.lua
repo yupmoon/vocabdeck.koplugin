@@ -75,6 +75,9 @@ function Context.install(VocabDeck)
                 return nil, _("Choose a source language first.")
             end
             DB.setLanguage(source_language)
+            if params.manual_book_id then
+                return params.manual_book_id
+            end
             local title = string.format(_("Manual entries (%s)"), source_language)
             local filepath = "vocabdeck://manual/" .. source_language
             local book_id = DB.getOrCreateBook(title, filepath, source_language)

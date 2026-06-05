@@ -226,8 +226,8 @@ function Add.install(VocabDeck)
         return card_id
     end
 
-    function VocabDeck:addManualCard(touchmenu_instance)
-        ManualAdd.start(self, touchmenu_instance)
+    function VocabDeck:addManualCard(touchmenu_instance, options)
+        ManualAdd.start(self, touchmenu_instance, options)
     end
 
     -- Enrich first, then auto-save — same pattern as Define (VD) but silent.

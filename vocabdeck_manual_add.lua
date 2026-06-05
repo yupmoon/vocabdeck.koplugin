@@ -67,16 +67,24 @@ local function showFetchChoice(plugin, card_id)
     UIManager:show(dialog)
 end
 
-local function saveManualCard(plugin, phrase, source_language, touchmenu_instance)
+local function saveManualCard(plugin, phrase, source_language, touchmenu_instance, options)
+    options = options or {}
     local params = {
         phrase = phrase,
         source_language = source_language,
         manual_entry = true,
         ai_status = DB.STATUS_PENDING,
         after_save = function(card_id)
+            if options.after_save then options.after_save(card_id) end
             showFetchChoice(plugin, card_id)
         end,
     }
+    local manual_book_id, err = plugin:_getBookId(params)
+    if not manual_book_id then
+        UIManager:show(InfoMessage:new{ text = err or _("Failed to create manual card record."), timeout = 3 })
+        return
+    end
+    params.manual_book_id = manual_book_id
     local ask_note = plugin.settings:readSetting("ask_note_on_add")
     if ask_note == nil then ask_note = true end
     if ask_note then
@@ -86,11 +94,11 @@ local function saveManualCard(plugin, phrase, source_language, touchmenu_instanc
     end
 end
 
-local function showSourcePicker(plugin, phrase, touchmenu_instance)
+local function showSourcePicker(plugin, phrase, touchmenu_instance, options)
     local dialog
     local function choose(source_language)
         UIManager:close(dialog)
-        saveManualCard(plugin, phrase, source_language, touchmenu_instance)
+        saveManualCard(plugin, phrase, source_language, touchmenu_instance, options)
     end
     local buttons = {}
     for __, language in ipairs(Languages.listManualChoices()) do
@@ -110,7 +118,8 @@ local function showSourcePicker(plugin, phrase, touchmenu_instance)
     UIManager:show(dialog)
 end
 
-function ManualAdd.start(plugin, touchmenu_instance)
+function ManualAdd.start(plugin, touchmenu_instance, options)
+    options = options or {}
     local dialog
     dialog = InputDialog:new{
         title = _("Add new card"),
@@ -134,7 +143,11 @@ function ManualAdd.start(plugin, touchmenu_instance)
                         return
                     end
                     closeInputDialog(dialog)
-                    showSourcePicker(plugin, phrase, touchmenu_instance)
+                    if options.source_language and options.source_language ~= "" then
+                        saveManualCard(plugin, phrase, options.source_language, touchmenu_instance, options)
+                    else
+                        showSourcePicker(plugin, phrase, touchmenu_instance, options)
+                    end
                 end,
             },
         } },

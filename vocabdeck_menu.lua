@@ -86,13 +86,6 @@ function Menu.build(plugin, config_error, plugin_version)
         end,
     }
     items[#items + 1] = {
-        text = _("Add new card"),
-        keep_menu_open = true,
-        callback = function(touchmenu_instance)
-            plugin:addManualCard(touchmenu_instance)
-        end,
-    }
-    items[#items + 1] = {
         text = _("Stats"),
         callback = function() plugin:showSummary() end,
     }

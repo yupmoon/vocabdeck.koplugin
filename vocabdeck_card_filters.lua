@@ -116,6 +116,22 @@ function Filters.showActionsDialog(self)
     local menu
     local item_table = {}
 
+    if not self.book_id then
+        item_table[#item_table + 1] = {
+            text = _("Add new card"),
+            callback = function()
+                UIManager:close(menu)
+                if self.plugin and self.plugin.addManualCard then
+                    self.plugin:addManualCard(nil, {
+                        source_language = self.active_language,
+                        after_save = function()
+                            self:reloadItems()
+                        end,
+                    })
+                end
+            end,
+        }
+    end
     item_table[#item_table + 1] = {
         text = self.book_id and _("Fetch AI data for this book") or _("Fetch AI data for all cards"),
         callback = function()
