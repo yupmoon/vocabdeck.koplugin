@@ -1305,6 +1305,10 @@ local CARD_SORT_ORDERS = {
         asc = "created_at ASC",
         desc = "created_at DESC",
     },
+    lapses = {
+        asc = "lapse_count ASC, due ASC",
+        desc = "lapse_count DESC, due ASC",
+    },
 }
 
 local function cardSortOrder(sort_by, sort_dir)

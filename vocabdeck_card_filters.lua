@@ -24,9 +24,10 @@ local SORT_LABELS = {
     alphabet = _("alphabet"),
     edited = _("edited time"),
     added = _("added time"),
+    lapses = _("lapses"),
 }
 
-local SORT_ORDER = { "added", "due", "alphabet", "edited" }
+local SORT_ORDER = { "added", "due", "alphabet", "edited", "lapses" }
 
 local SORT_DIR_LABELS = {
     asc = _("ascending"),
@@ -40,6 +41,7 @@ local SORT_BY_MENU_LABELS = {
     due = _("Due time"),
     alphabet = _("Alphabet"),
     edited = _("Edited time"),
+    lapses = _("Lapses"),
 }
 
 local SORT_STATE_LABELS = {
@@ -58,6 +60,10 @@ local SORT_STATE_LABELS = {
     edited = {
         asc = _("Oldest edited"),
         desc = _("Recently edited"),
+    },
+    lapses = {
+        asc = _("Fewest lapses"),
+        desc = _("Most lapses"),
     },
 }
 
@@ -108,6 +114,8 @@ local function clearFilters(self)
     self.filter_learning = false
     self.filter_learned = false
     self.filter_book_id = nil
+    self.sort_by = Filters.DEFAULT_SORT_BY
+    self.sort_dir = Filters.DEFAULT_SORT_DIR
     self.show_page = 1
     self:reloadItems()
 end
@@ -562,6 +570,16 @@ function Filters.onShowMenu(self)
         end,
     }
     item_table[#item_table].separator = true
+    item_table[#item_table + 1] = {
+        text = _("Hardest"),
+        callback = function()
+            UIManager:close(menu)
+            self.sort_by = "lapses"
+            self.sort_dir = "desc"
+            self.show_page = 1
+            self:reloadItems()
+        end,
+    }
 
     if not self.book_id then
         local books = DB.listBooks()
