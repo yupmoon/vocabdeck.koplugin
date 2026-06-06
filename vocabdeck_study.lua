@@ -372,10 +372,78 @@ end
 
 function StudyScreen:invalidateAutoRate()
     self.auto_rate_token = (self.auto_rate_token or 0) + 1
+    self.pending_auto_rate = nil
 end
 
 function StudyScreen:invalidateAdvance()
     self.advance_token = (self.advance_token or 0) + 1
+end
+
+function StudyScreen:_fireAutoRate(run_id)
+    local pending = self.pending_auto_rate
+    if not pending or pending.paused or pending.run_id ~= run_id then return end
+    if self.showing_back
+        and self.current_card
+        and self.current_card.id == pending.card_id
+        and self.auto_rate_token == pending.token then
+        local rating = pending.rating
+        self.pending_auto_rate = nil
+        self:onRate(rating, 0)
+    end
+end
+
+function StudyScreen:_schedulePendingAutoRate(delay)
+    local pending = self.pending_auto_rate
+    if not pending then return end
+    delay = math.max(0, math.floor((tonumber(delay) or 0) + 0.5))
+    pending.run_id = (pending.run_id or 0) + 1
+    pending.due_at = os.time() + delay
+    local run_id = pending.run_id
+    UIManager:scheduleIn(delay, function()
+        self:_fireAutoRate(run_id)
+    end)
+end
+
+function StudyScreen:scheduleAutoRate(rating, delay, card_id)
+    if not rating or rating == "" or not card_id then return end
+    self.pending_auto_rate = {
+        rating = rating,
+        card_id = card_id,
+        token = self.auto_rate_token,
+        paused = false,
+        remaining = nil,
+        run_id = 0,
+    }
+    self:_schedulePendingAutoRate(delay)
+end
+
+function StudyScreen:pauseAutoRate()
+    local pending = self.pending_auto_rate
+    if not pending or pending.paused then return end
+    if not self.showing_back
+        or not self.current_card
+        or self.current_card.id ~= pending.card_id
+        or self.auto_rate_token ~= pending.token then
+        self:invalidateAutoRate()
+        return
+    end
+    pending.remaining = math.max(0, (pending.due_at or os.time()) - os.time())
+    pending.paused = true
+    pending.run_id = (pending.run_id or 0) + 1
+end
+
+function StudyScreen:resumeAutoRate()
+    local pending = self.pending_auto_rate
+    if not pending or not pending.paused then return end
+    if not self.showing_back
+        or not self.current_card
+        or self.current_card.id ~= pending.card_id
+        or self.auto_rate_token ~= pending.token then
+        self:invalidateAutoRate()
+        return
+    end
+    pending.paused = false
+    self:_schedulePendingAutoRate(pending.remaining or 0)
 end
 
 function StudyScreen:isAutoRateEnabled()
@@ -619,27 +687,32 @@ function StudyScreen:onShowOrNext()
         -- Auto-rate based on recall time. Rating buttons remain as override.
         if auto_rate_label ~= "" then
             local auto_card_id = self.current_card and self.current_card.id
-            local auto_token = self.auto_rate_token
             local rating = auto_rate_label:lower()
-            UIManager:scheduleIn(auto_config.delay, function()
-                if self.showing_back
-                    and self.current_card
-                    and self.current_card.id == auto_card_id
-                    and self.auto_rate_token == auto_token then
-                    self:onRate(rating, 0)
-                end
-            end)
+            self:scheduleAutoRate(rating, auto_config.delay, auto_card_id)
         end
     end
 end
 
 function StudyScreen:showFullText()
     if not self.card_full_text or self.card_full_text == "" then return end
-    self:invalidateAutoRate()
-    UIManager:show(TextViewer:new{
+    self:pauseAutoRate()
+    local viewer
+    local resumed = false
+    local function resumeOnce()
+        if resumed then return end
+        resumed = true
+        self:resumeAutoRate()
+    end
+    viewer = TextViewer:new{
         title = _("Full text"),
         text = self.card_full_text,
-    })
+    }
+    local old_on_close = viewer.onCloseWidget
+    function viewer:onCloseWidget()
+        if old_on_close then old_on_close(self) end
+        resumeOnce()
+    end
+    UIManager:show(viewer)
 end
 
 function StudyScreen:refreshCurrentCard()
@@ -696,7 +769,7 @@ function StudyScreen:onRefetchAIData()
 end
 
 function StudyScreen:showActionMenu()
-    self:invalidateAutoRate()
+    self:pauseAutoRate()
     StudyActions.showMenu(self)
 end
 

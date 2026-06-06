@@ -93,29 +93,41 @@ Example:
     return Querier.buildMessages(system_prompt, user_prompt)
 end
 
-function MemoryHelper.showForCard(plugin, card, on_saved)
-    if not card then return end
+function MemoryHelper.showForCard(plugin, card, on_saved, on_close)
+    local flow_closed = false
+    local function finishFlow()
+        if flow_closed then return end
+        flow_closed = true
+        if on_close then on_close() end
+    end
+
+    if not card then
+        finishFlow()
+        return
+    end
     if not plugin or not plugin.querier then
         UIManager:show(InfoMessage:new{
             text = _("AI fetch failed:\nVocabDeck AI provider is not configured."),
             timeout = 4,
         })
+        finishFlow()
         return
     end
 
     -- Check in-memory cache first (fastest)
     local cache_entry = _memory_cache[card.id]
     if cache_entry and cache_entry.expires_at > os.time() then
-        MemoryHelper._showViewer(plugin, card, cache_entry.response, on_saved, "memory")
+        MemoryHelper._showViewer(plugin, card, cache_entry.response, on_saved, "memory", finishFlow)
         return
     end
 
     -- Check DB cache (still fast, no API call)
     if card.ai_memory_helper and card.ai_memory_helper ~= "" then
-        MemoryHelper._showViewer(plugin, card, card.ai_memory_helper, on_saved, "db")
+        MemoryHelper._showViewer(plugin, card, card.ai_memory_helper, on_saved, "db", finishFlow)
         return
     end
 
+    local viewer_opened = false
     AIRunner.run(plugin, {
         message = _("Building AI memory helper for:\n%s"),
         phrase = card.phrase or "",
@@ -128,6 +140,7 @@ function MemoryHelper.showForCard(plugin, card, on_saved)
                 text = string.format(_("AI memory helper failed:\n%s"), err),
                 timeout = 4,
             })
+            finishFlow()
         end,
         on_success = function(response)
             local helper_text = cleanText(response)
@@ -138,6 +151,7 @@ function MemoryHelper.showForCard(plugin, card, on_saved)
                     text = _("AI returned an empty response. Try again later."),
                     timeout = 3,
                 })
+                finishFlow()
                 return
             end
 
@@ -151,7 +165,13 @@ function MemoryHelper.showForCard(plugin, card, on_saved)
             DB.updateCardMemoryHelper(card.id, helper_text)
             card.ai_memory_helper = helper_text
 
-            MemoryHelper._showViewer(plugin, card, helper_text, on_saved, "fresh")
+            viewer_opened = true
+            MemoryHelper._showViewer(plugin, card, helper_text, on_saved, "fresh", finishFlow)
+        end,
+        on_finally = function()
+            if not viewer_opened then
+                finishFlow()
+            end
         end,
     })
 end
@@ -163,8 +183,17 @@ end
 -- @param helper_text  The AI-generated memory aid text.
 -- @param on_saved     Optional callback invoked after saving as note.
 -- @param source       One of "memory", "db", or "fresh" — controls the title indicator.
-function MemoryHelper._showViewer(plugin, card, helper_text, on_saved, source)
+-- @param on_close     Optional callback invoked when the helper flow is done.
+function MemoryHelper._showViewer(plugin, card, helper_text, on_saved, source, on_close)
     local viewer
+    local closed = false
+    local suppress_close = false
+
+    local function notifyClosed()
+        if closed or suppress_close then return end
+        closed = true
+        if on_close then on_close() end
+    end
 
     -- Build the title with a source indicator
     local title = _("AI memory helper")
@@ -234,12 +263,13 @@ function MemoryHelper._showViewer(plugin, card, helper_text, on_saved, source)
         {
             text = _("Regenerate"),
             callback = function()
+                suppress_close = true
                 if viewer then UIManager:close(viewer) end
                 -- Clear both caches
                 _memory_cache[card.id] = nil
                 card.ai_memory_helper = ""
                 -- Re-fetch from AI
-                MemoryHelper.showForCard(plugin, card, on_saved)
+                MemoryHelper.showForCard(plugin, card, on_saved, on_close)
             end,
         },
         {
@@ -255,12 +285,20 @@ function MemoryHelper._showViewer(plugin, card, helper_text, on_saved, source)
         buttons_table = buttons,
         add_default_buttons = false,
     }
+    local old_on_close = viewer.onCloseWidget
+    function viewer:onCloseWidget()
+        if old_on_close then old_on_close(self) end
+        notifyClosed()
+    end
     UIManager:show(viewer)
 end
 
-function MemoryHelper.show(study, on_saved)
-    if not study or not study.current_card then return end
-    MemoryHelper.showForCard(study.plugin, study.current_card, on_saved)
+function MemoryHelper.show(study, on_saved, on_close)
+    if not study or not study.current_card then
+        if on_close then on_close() end
+        return
+    end
+    MemoryHelper.showForCard(study.plugin, study.current_card, on_saved, on_close)
 end
 
 return MemoryHelper

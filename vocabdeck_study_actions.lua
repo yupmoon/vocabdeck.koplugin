@@ -17,23 +17,33 @@ local MemoryHelper = require("vocabdeck_memory_helper")
 
 local Actions = {}
 
-function Actions.deleteCard(study)
+function Actions.deleteCard(study, on_cancel)
     if not study.current_card then return end
-    if study.invalidateAutoRate then study:invalidateAutoRate() end
-    UIManager:show(ConfirmBox:new{
+    local confirmed = false
+    local confirm
+    confirm = ConfirmBox:new{
         text = _("Delete this card?"),
         ok_text = _("Delete"),
         ok_callback = function()
+            confirmed = true
+            if study.invalidateAutoRate then study:invalidateAutoRate() end
             DB.deleteCard(study.current_card.id)
             study.current_card = nil
             study.showing_back = false
             study:loadNextCard()
         end,
-    })
+    }
+    local old_on_close = confirm.onCloseWidget
+    function confirm:onCloseWidget()
+        if old_on_close then old_on_close(self) end
+        if not confirmed and on_cancel then on_cancel() end
+    end
+    UIManager:show(confirm)
 end
 
 function Actions.suspendCard(study)
     if not study.current_card then return end
+    if study.invalidateAutoRate then study:invalidateAutoRate() end
     DB.setCardSuspended(study.current_card.id, true)
     UIManager:show(InfoMessage:new{ text = _("Card suspended."), timeout = 2 })
     study.current_card = nil
@@ -41,19 +51,28 @@ function Actions.suspendCard(study)
     study:loadNextCard()
 end
 
-function Actions.markKnown(study)
+function Actions.markKnown(study, on_cancel)
     if not study.current_card then return end
-    if study.invalidateAutoRate then study:invalidateAutoRate() end
-    UIManager:show(ConfirmBox:new{
+    local confirmed = false
+    local confirm
+    confirm = ConfirmBox:new{
         text = _("Mark this card as known and hide it from study?"),
         ok_text = _("Mark as known"),
         ok_callback = function()
+            confirmed = true
+            if study.invalidateAutoRate then study:invalidateAutoRate() end
             DB.setCardKnown(study.current_card.id, true)
             study.current_card = nil
             study.showing_back = false
             study:loadNextCard()
         end,
-    })
+    }
+    local old_on_close = confirm.onCloseWidget
+    function confirm:onCloseWidget()
+        if old_on_close then old_on_close(self) end
+        if not confirmed and on_cancel then on_cancel() end
+    end
+    UIManager:show(confirm)
 end
 
 function Actions.toggleFlag(study)
@@ -69,20 +88,29 @@ function Actions.toggleFlag(study)
     })
 end
 
-function Actions.resetCard(study)
+function Actions.resetCard(study, on_cancel)
     if not study.current_card then return end
-    if study.invalidateAutoRate then study:invalidateAutoRate() end
-    UIManager:show(ConfirmBox:new{
+    local confirmed = false
+    local confirm
+    confirm = ConfirmBox:new{
         text = _("Reset this card to new?"),
         ok_text = _("Reset"),
         ok_callback = function()
+            confirmed = true
+            if study.invalidateAutoRate then study:invalidateAutoRate() end
             DB.resetCardScheduling(study.current_card.id)
             UIManager:show(InfoMessage:new{ text = _("Card reset."), timeout = 2 })
             study.current_card = nil
             study.showing_back = false
             study:loadNextCard()
         end,
-    })
+    }
+    local old_on_close = confirm.onCloseWidget
+    function confirm:onCloseWidget()
+        if old_on_close then old_on_close(self) end
+        if not confirmed and on_cancel then on_cancel() end
+    end
+    UIManager:show(confirm)
 end
 
 function Actions.unleechCard(study)
@@ -98,7 +126,7 @@ function Actions.unleechCard(study)
     UIManager:show(InfoMessage:new{ text = _("Leech cleared."), timeout = 2 })
 end
 
-function Actions.refetchAIData(study)
+function Actions.refetchAIData(study, on_done)
     if not study.current_card then return end
     local card = study.current_card
     local plugin = study.plugin
@@ -114,24 +142,46 @@ function Actions.refetchAIData(study)
                 study:refreshCurrentCard()
             end
         end,
+        on_finally = function()
+            if on_done then on_done() end
+        end,
     })
 end
 
-function Actions.showMemory(study)
-    if not study.current_card then return end
-    UIManager:show(TextViewer:new{
+function Actions.showMemory(study, on_close)
+    if not study.current_card then
+        if on_close then on_close() end
+        return
+    end
+    local viewer
+    local closed = false
+    local function notifyClosed()
+        if closed then return end
+        closed = true
+        if on_close then on_close() end
+    end
+    viewer = TextViewer:new{
         title = _("Card memory"),
         text = Memory.buildText(study.current_card),
-    })
+    }
+    local old_on_close = viewer.onCloseWidget
+    function viewer:onCloseWidget()
+        if old_on_close then old_on_close(self) end
+        notifyClosed()
+    end
+    UIManager:show(viewer)
 end
 
-function Actions.showAIMemoryHelp(study)
-    if not study.current_card then return end
+function Actions.showAIMemoryHelp(study, on_close)
+    if not study.current_card then
+        if on_close then on_close() end
+        return
+    end
     MemoryHelper.show(study, function(saved_card)
         if study.current_card and study.current_card.id == saved_card.id then
             study:refreshCurrentCard()
         end
-    end)
+    end, on_close)
 end
 
 function Actions.showMenu(study)
@@ -140,8 +190,18 @@ function Actions.showMenu(study)
         return
     end
     local dialog
-    local function closeDialog()
+    local dialog_resume_allowed = true
+    local dialog_closed = false
+    local function resumeStudy()
+        if study.resumeAutoRate then study:resumeAutoRate() end
+    end
+    local function closeDialog(resume)
+        dialog_resume_allowed = resume ~= false
         if dialog then UIManager:close(dialog) end
+        if dialog_resume_allowed and not dialog_closed then
+            dialog_closed = true
+            resumeStudy()
+        end
     end
     local flagged = (study.current_card.flag or 0) ~= 0
     dialog = ButtonDialog:new{
@@ -150,65 +210,67 @@ function Actions.showMenu(study)
             { {
                 text = flagged and _("Clear flag") or _("Flag card"),
                 callback = function()
-                    closeDialog()
+                    closeDialog(false)
                     Actions.toggleFlag(study)
+                    resumeStudy()
                 end,
             } },
             { {
                 text = _("Suspend card"),
                 callback = function()
-                    closeDialog()
+                    closeDialog(false)
                     Actions.suspendCard(study)
                 end,
             } },
             { {
                 text = _("Mark as known"),
                 callback = function()
-                    closeDialog()
-                    Actions.markKnown(study)
+                    closeDialog(false)
+                    Actions.markKnown(study, resumeStudy)
                 end,
             } },
             { {
                 text = _("Reset card"),
                 callback = function()
-                    closeDialog()
-                    Actions.resetCard(study)
+                    closeDialog(false)
+                    Actions.resetCard(study, resumeStudy)
                 end,
             } },
             { {
                 text = _("Un-leech card"),
                 callback = function()
-                    closeDialog()
+                    closeDialog(false)
                     Actions.unleechCard(study)
+                    resumeStudy()
                 end,
                 enabled = (study.current_card.leech or 0) ~= 0,
             } },
             { {
                 text = _("Memory"),
                 callback = function()
-                    closeDialog()
-                    Actions.showMemory(study)
+                    closeDialog(false)
+                    Actions.showMemory(study, resumeStudy)
                 end,
             } },
             { {
                 text = _("Refetch AI data"),
                 callback = function()
-                    closeDialog()
-                    Actions.refetchAIData(study)
+                    closeDialog(false)
+                    Actions.refetchAIData(study, resumeStudy)
                 end,
             } },
             { {
                 text = _("AI memory helper"),
                 callback = function()
-                    closeDialog()
-                    Actions.showAIMemoryHelp(study)
+                    closeDialog(false)
+                    Actions.showAIMemoryHelp(study, resumeStudy)
                 end,
             } },
             { {
                 text = _("Delete card"),
                 callback = function()
-                    closeDialog()
-                    Actions.deleteCard(study)
+                    closeDialog(false)
+                    Actions.deleteCard(study, resumeStudy)
                 end,
             } },
             { {
@@ -217,6 +279,15 @@ function Actions.showMenu(study)
             } },
         },
     }
+    local old_on_close = dialog.onCloseWidget
+    function dialog:onCloseWidget()
+        if old_on_close then old_on_close(self) end
+        if dialog_closed then return end
+        dialog_closed = true
+        if dialog_resume_allowed then
+            resumeStudy()
+        end
+    end
     UIManager:show(dialog)
 end
 
