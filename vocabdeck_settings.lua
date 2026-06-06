@@ -478,6 +478,112 @@ local function makeBackupItems()
     }
 end
 
+local function makeAutoRateItems(plugin, refreshMenu, touchmenu_instance)
+    return {
+        {
+            text = _("Enable auto-rate"),
+            checked_func = function()
+                return readBool(plugin, "auto_rate_enabled", false)
+            end,
+            keep_menu_open = true,
+            callback = function(submenu_instance)
+                local current = readBool(plugin, "auto_rate_enabled", false)
+                plugin.settings:saveSetting("auto_rate_enabled", not current)
+                plugin.settings:flush()
+                refreshMenu(submenu_instance or touchmenu_instance)
+            end,
+        },
+        {
+            text = _("Easy cutoff"),
+            text_func = function()
+                local value = tonumber(plugin.settings:readSetting("auto_rate_easy_cutoff", 5)) or 5
+                return rowValue(_("Easy cutoff"), string.format(_("%ds"), value))
+            end,
+            keep_menu_open = true,
+            callback = function(submenu_instance)
+                local current = tonumber(plugin.settings:readSetting("auto_rate_easy_cutoff", 5)) or 5
+                showNumberInput(
+                    _("Auto-rate Easy cutoff"),
+                    _("Recall time in seconds for automatic Easy."),
+                    current, 1,
+                    function(value)
+                        value = math.floor((tonumber(value) or 5) + 0.5)
+                        plugin.settings:saveSetting("auto_rate_easy_cutoff", value)
+                        plugin.settings:flush()
+                        refreshMenu(submenu_instance or touchmenu_instance)
+                    end
+                )
+            end,
+        },
+        {
+            text = _("Good cutoff"),
+            text_func = function()
+                local value = tonumber(plugin.settings:readSetting("auto_rate_good_cutoff", 10)) or 10
+                return rowValue(_("Good cutoff"), string.format(_("%ds"), value))
+            end,
+            keep_menu_open = true,
+            callback = function(submenu_instance)
+                local current = tonumber(plugin.settings:readSetting("auto_rate_good_cutoff", 10)) or 10
+                showNumberInput(
+                    _("Auto-rate Good cutoff"),
+                    _("Recall time in seconds for automatic Good. Values below Easy are treated as Easy."),
+                    current, 1,
+                    function(value)
+                        value = math.floor((tonumber(value) or 10) + 0.5)
+                        plugin.settings:saveSetting("auto_rate_good_cutoff", value)
+                        plugin.settings:flush()
+                        refreshMenu(submenu_instance or touchmenu_instance)
+                    end
+                )
+            end,
+        },
+        {
+            text = _("Hard cutoff"),
+            text_func = function()
+                local value = tonumber(plugin.settings:readSetting("auto_rate_hard_cutoff", 25)) or 25
+                return rowValue(_("Hard cutoff"), string.format(_("%ds"), value))
+            end,
+            keep_menu_open = true,
+            callback = function(submenu_instance)
+                local current = tonumber(plugin.settings:readSetting("auto_rate_hard_cutoff", 25)) or 25
+                showNumberInput(
+                    _("Auto-rate Hard cutoff"),
+                    _("Recall time in seconds for automatic Hard. Longer recalls stay manual."),
+                    current, 1,
+                    function(value)
+                        value = math.floor((tonumber(value) or 25) + 0.5)
+                        plugin.settings:saveSetting("auto_rate_hard_cutoff", value)
+                        plugin.settings:flush()
+                        refreshMenu(submenu_instance or touchmenu_instance)
+                    end
+                )
+            end,
+        },
+        {
+            text = _("Answer delay"),
+            text_func = function()
+                local value = tonumber(plugin.settings:readSetting("auto_rate_answer_delay", 4)) or 4
+                return rowValue(_("Answer delay"), string.format(_("%ds"), value))
+            end,
+            keep_menu_open = true,
+            callback = function(submenu_instance)
+                local current = tonumber(plugin.settings:readSetting("auto_rate_answer_delay", 4)) or 4
+                showNumberInput(
+                    _("Auto-rate answer delay"),
+                    _("Seconds to stay on the answer side before automatic rating. 0 = immediately."),
+                    current, 0,
+                    function(value)
+                        value = math.floor((tonumber(value) or 4) + 0.5)
+                        plugin.settings:saveSetting("auto_rate_answer_delay", value)
+                        plugin.settings:flush()
+                        refreshMenu(submenu_instance or touchmenu_instance)
+                    end
+                )
+            end,
+        },
+    }
+end
+
 function Settings.buildAiMenuItems(plugin)
     return {
         makeProviderMenuItem(plugin),
@@ -600,33 +706,30 @@ function Settings.buildMenuItems(plugin, default_touchmenu_instance)
         },
         {
             text = _("Auto-rate by recall time"),
-            checked_func = function()
-                return readBool(plugin, "auto_rate_enabled", false)
+            text_func = function()
+                local enabled = readBool(plugin, "auto_rate_enabled", false)
+                return rowValue(_("Auto-rate by recall time"), enabled and _("On") or _("Off"))
             end,
-            keep_menu_open = true,
-            callback = function(touchmenu_instance)
-                local current = readBool(plugin, "auto_rate_enabled", false)
-                plugin.settings:saveSetting("auto_rate_enabled", not current)
-                plugin.settings:flush()
-                refreshMenu(touchmenu_instance)
+            sub_item_table_func = function(touchmenu_instance)
+                return makeAutoRateItems(plugin, refreshMenu, touchmenu_instance)
             end,
         },
         {
-            text = _("Auto-rate Easy cutoff"),
+            text = _("Again advance delay"),
             text_func = function()
-                local value = tonumber(plugin.settings:readSetting("auto_rate_easy_cutoff", 5)) or 5
-                return rowValue(_("Auto-rate Easy cutoff"), string.format(_("%ds"), value))
+                local value = tonumber(plugin.settings:readSetting("manual_again_advance_delay", 5)) or 5
+                return rowValue(_("Again advance delay"), string.format(_("%ds"), value))
             end,
             keep_menu_open = true,
             callback = function(touchmenu_instance)
-                local current = tonumber(plugin.settings:readSetting("auto_rate_easy_cutoff", 5)) or 5
+                local current = tonumber(plugin.settings:readSetting("manual_again_advance_delay", 5)) or 5
                 showNumberInput(
-                    _("Auto-rate Easy cutoff"),
-                    _("Recall time in seconds for automatic Easy."),
-                    current, 1,
+                    _("Again advance delay"),
+                    _("Seconds to stay on the answer side after manually rating Again."),
+                    current, 0,
                     function(value)
                         value = math.floor((tonumber(value) or 5) + 0.5)
-                        plugin.settings:saveSetting("auto_rate_easy_cutoff", value)
+                        plugin.settings:saveSetting("manual_again_advance_delay", value)
                         plugin.settings:flush()
                         refreshMenu(touchmenu_instance)
                     end
@@ -634,65 +737,65 @@ function Settings.buildMenuItems(plugin, default_touchmenu_instance)
             end,
         },
         {
-            text = _("Auto-rate Good cutoff"),
+            text = _("Hard advance delay"),
             text_func = function()
-                local value = tonumber(plugin.settings:readSetting("auto_rate_good_cutoff", 10)) or 10
-                return rowValue(_("Auto-rate Good cutoff"), string.format(_("%ds"), value))
+                local value = tonumber(plugin.settings:readSetting("manual_hard_advance_delay", 4)) or 4
+                return rowValue(_("Hard advance delay"), string.format(_("%ds"), value))
             end,
             keep_menu_open = true,
             callback = function(touchmenu_instance)
-                local current = tonumber(plugin.settings:readSetting("auto_rate_good_cutoff", 10)) or 10
+                local current = tonumber(plugin.settings:readSetting("manual_hard_advance_delay", 4)) or 4
                 showNumberInput(
-                    _("Auto-rate Good cutoff"),
-                    _("Recall time in seconds for automatic Good. Values below Easy are treated as Easy."),
-                    current, 1,
-                    function(value)
-                        value = math.floor((tonumber(value) or 10) + 0.5)
-                        plugin.settings:saveSetting("auto_rate_good_cutoff", value)
-                        plugin.settings:flush()
-                        refreshMenu(touchmenu_instance)
-                    end
-                )
-            end,
-        },
-        {
-            text = _("Auto-rate Hard cutoff"),
-            text_func = function()
-                local value = tonumber(plugin.settings:readSetting("auto_rate_hard_cutoff", 25)) or 25
-                return rowValue(_("Auto-rate Hard cutoff"), string.format(_("%ds"), value))
-            end,
-            keep_menu_open = true,
-            callback = function(touchmenu_instance)
-                local current = tonumber(plugin.settings:readSetting("auto_rate_hard_cutoff", 25)) or 25
-                showNumberInput(
-                    _("Auto-rate Hard cutoff"),
-                    _("Recall time in seconds for automatic Hard. Longer recalls stay manual."),
-                    current, 1,
-                    function(value)
-                        value = math.floor((tonumber(value) or 25) + 0.5)
-                        plugin.settings:saveSetting("auto_rate_hard_cutoff", value)
-                        plugin.settings:flush()
-                        refreshMenu(touchmenu_instance)
-                    end
-                )
-            end,
-        },
-        {
-            text = _("Auto-rate answer delay"),
-            text_func = function()
-                local value = tonumber(plugin.settings:readSetting("auto_rate_answer_delay", 4)) or 4
-                return rowValue(_("Auto-rate answer delay"), string.format(_("%ds"), value))
-            end,
-            keep_menu_open = true,
-            callback = function(touchmenu_instance)
-                local current = tonumber(plugin.settings:readSetting("auto_rate_answer_delay", 4)) or 4
-                showNumberInput(
-                    _("Auto-rate answer delay"),
-                    _("Seconds to stay on the answer side before automatic rating. 0 = immediately."),
+                    _("Hard advance delay"),
+                    _("Seconds to stay on the answer side after manually rating Hard."),
                     current, 0,
                     function(value)
                         value = math.floor((tonumber(value) or 4) + 0.5)
-                        plugin.settings:saveSetting("auto_rate_answer_delay", value)
+                        plugin.settings:saveSetting("manual_hard_advance_delay", value)
+                        plugin.settings:flush()
+                        refreshMenu(touchmenu_instance)
+                    end
+                )
+            end,
+        },
+        {
+            text = _("Good advance delay"),
+            text_func = function()
+                local value = tonumber(plugin.settings:readSetting("manual_good_advance_delay", 3)) or 3
+                return rowValue(_("Good advance delay"), string.format(_("%ds"), value))
+            end,
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                local current = tonumber(plugin.settings:readSetting("manual_good_advance_delay", 3)) or 3
+                showNumberInput(
+                    _("Good advance delay"),
+                    _("Seconds to stay on the answer side after manually rating Good."),
+                    current, 0,
+                    function(value)
+                        value = math.floor((tonumber(value) or 3) + 0.5)
+                        plugin.settings:saveSetting("manual_good_advance_delay", value)
+                        plugin.settings:flush()
+                        refreshMenu(touchmenu_instance)
+                    end
+                )
+            end,
+        },
+        {
+            text = _("Easy advance delay"),
+            text_func = function()
+                local value = tonumber(plugin.settings:readSetting("manual_easy_advance_delay", 2)) or 2
+                return rowValue(_("Easy advance delay"), string.format(_("%ds"), value))
+            end,
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                local current = tonumber(plugin.settings:readSetting("manual_easy_advance_delay", 2)) or 2
+                showNumberInput(
+                    _("Easy advance delay"),
+                    _("Seconds to stay on the answer side after manually rating Easy."),
+                    current, 0,
+                    function(value)
+                        value = math.floor((tonumber(value) or 2) + 0.5)
+                        plugin.settings:saveSetting("manual_easy_advance_delay", value)
                         plugin.settings:flush()
                         refreshMenu(touchmenu_instance)
                     end

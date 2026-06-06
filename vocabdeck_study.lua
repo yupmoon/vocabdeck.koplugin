@@ -45,6 +45,10 @@ local DEFAULT_AUTO_EASY_CUTOFF = 5
 local DEFAULT_AUTO_GOOD_CUTOFF = 10
 local DEFAULT_AUTO_HARD_CUTOFF = 25
 local DEFAULT_AUTO_ANSWER_DELAY = 4
+local DEFAULT_MANUAL_AGAIN_DELAY = 5
+local DEFAULT_MANUAL_HARD_DELAY = 4
+local DEFAULT_MANUAL_GOOD_DELAY = 3
+local DEFAULT_MANUAL_EASY_DELAY = 2
 
 -- ── Text assembly helpers ────────────────────────────────────────────────
 
@@ -370,11 +374,29 @@ function StudyScreen:invalidateAutoRate()
     self.auto_rate_token = (self.auto_rate_token or 0) + 1
 end
 
+function StudyScreen:invalidateAdvance()
+    self.advance_token = (self.advance_token or 0) + 1
+end
+
 function StudyScreen:isAutoRateEnabled()
     local plugin = self.plugin
     return plugin
         and plugin:readSetting("study_timer_enabled", true) ~= false
         and plugin:readSetting("auto_rate_enabled", false) == true
+end
+
+function StudyScreen:getManualAdvanceDelay(rating)
+    local plugin = self.plugin
+    local defaults = {
+        again = DEFAULT_MANUAL_AGAIN_DELAY,
+        hard = DEFAULT_MANUAL_HARD_DELAY,
+        good = DEFAULT_MANUAL_GOOD_DELAY,
+        easy = DEFAULT_MANUAL_EASY_DELAY,
+    }
+    local key = "manual_" .. tostring(rating or "") .. "_advance_delay"
+    local fallback = defaults[rating] or 0
+    local value = plugin and tonumber(plugin:readSetting(key, fallback)) or fallback
+    return math.max(0, math.floor((value or fallback) + 0.5))
 end
 
 function StudyScreen:getAutoRateConfig()
@@ -483,6 +505,7 @@ end
 
 function StudyScreen:loadNextCard()
     self:invalidateAutoRate()
+    self:invalidateAdvance()
     local plugin = self.plugin
     local randomize = plugin and plugin:readSetting("randomize_cards", false) or false
     local daily_new_limit = plugin and (tonumber(plugin:readSetting("daily_new_cards_limit", 20)) or 20) or 20
@@ -603,7 +626,7 @@ function StudyScreen:onShowOrNext()
                     and self.current_card
                     and self.current_card.id == auto_card_id
                     and self.auto_rate_token == auto_token then
-                    self:onRate(rating)
+                    self:onRate(rating, 0)
                 end
             end)
         end
@@ -677,9 +700,10 @@ function StudyScreen:showActionMenu()
     StudyActions.showMenu(self)
 end
 
-function StudyScreen:onRate(rating)
+function StudyScreen:onRate(rating, advance_delay)
     if not self.current_card then return end
     self:invalidateAutoRate()
+    self:invalidateAdvance()
     local card = self.current_card
     local was_leech = (card.leech or 0) ~= 0
     local updated = DB.updateCardScheduling(card, rating, nil, self:getDesiredRetention(),
@@ -727,8 +751,26 @@ function StudyScreen:onRate(rating)
         end
     end
     self.current_card = nil
-    self.showing_back = false
-    self:loadNextCard()
+    self:setRatingButtonsEnabled(false)
+
+    local delay = advance_delay
+    if delay == nil then
+        delay = self:getManualAdvanceDelay(rating)
+    end
+    delay = math.max(0, math.floor((tonumber(delay) or 0) + 0.5))
+    if delay == 0 then
+        self.showing_back = false
+        self:loadNextCard()
+        return
+    end
+
+    local advance_token = self.advance_token
+    UIManager:scheduleIn(delay, function()
+        if self.advance_token == advance_token and not self.current_card then
+            self.showing_back = false
+            self:loadNextCard()
+        end
+    end)
 end
 
 function StudyScreen:showBookSelection()
@@ -856,6 +898,7 @@ end
 
 function StudyScreen:onClose()
     self:invalidateAutoRate()
+    self:invalidateAdvance()
     UIManager:close(self)
     -- Request a full refresh so the reader screen behind us is redrawn
     -- cleanly (no leftover pixels from the deck screen).
@@ -865,6 +908,7 @@ end
 
 function StudyScreen:onCloseWidget()
     self:invalidateAutoRate()
+    self:invalidateAdvance()
     -- Also fires on system dismissals (e.g. the user presses Back or switches
     -- documents). Same motivation as onClose.
     UIManager:setDirty(nil, "full")
