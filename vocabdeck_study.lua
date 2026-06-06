@@ -605,8 +605,10 @@ function StudyScreen:loadNextCard()
             _("No more cards due. Keep it up!"),
             _("All reviewed. Excellent consistency!"),
         }
-        local idx = (self._congrats_idx or 0) % #CONGRATS + 1
-        self._congrats_idx = idx
+        local idx = tonumber(self.plugin:readSetting("congrats_index", 1)) or 1
+        if idx < 1 or idx > #CONGRATS then idx = 1 end
+        self.plugin:saveSetting("congrats_index", idx % #CONGRATS + 1)
+        self.plugin.settings:flush()
         local msg = CONGRATS[idx]
         self.card_widget:setText(msg)
         self.back_card_widget:setText(msg)
