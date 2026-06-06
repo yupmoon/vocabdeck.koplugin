@@ -798,6 +798,19 @@ function Settings.buildMenuItems(plugin, default_touchmenu_instance)
             end,
         },
         {
+            text = _("Study reverse (meaning → phrase)"),
+            checked_func = function()
+                return readBool(plugin, "study_reverse", false)
+            end,
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                local current = readBool(plugin, "study_reverse", false)
+                plugin.settings:saveSetting("study_reverse", not current)
+                plugin.settings:flush()
+                refreshMenu(touchmenu_instance)
+            end,
+        },
+        {
             text = _("Auto-rate by recall time"),
             text_func = function()
                 local enabled = readBool(plugin, "auto_rate_enabled", false)

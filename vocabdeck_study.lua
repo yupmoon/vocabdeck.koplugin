@@ -626,6 +626,11 @@ function StudyScreen:loadNextCard()
     self:updateTitle()
     self:updateQueueCounts(require_enriched)
     local front_state = CardFields.getFieldState(plugin, "front")
+    local back_state = CardFields.getFieldState(plugin, "back")
+    local reverse = plugin and plugin:readSetting("study_reverse", false) or false
+    if reverse then
+        front_state, back_state = back_state, front_state
+    end
     local show_labels = plugin and plugin:readSetting("show_section_labels", true) and true or false
     local front_text = buildSide(card, front_state, show_labels)
     -- Tapping the card always presents the labelled version.
@@ -674,6 +679,10 @@ function StudyScreen:onShowOrNext()
         end
         local plugin = self.plugin
         local back_state = CardFields.getFieldState(plugin, "back")
+        local reverse = plugin and plugin:readSetting("study_reverse", false) or false
+        if reverse then
+            back_state = CardFields.getFieldState(plugin, "front")
+        end
         local show_labels = plugin and plugin:readSetting("show_section_labels", true) and true or false
         local back_text = buildSide(self.current_card, back_state, show_labels)
         -- Full-text viewer always shows labelled, double-newline version.
