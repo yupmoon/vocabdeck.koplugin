@@ -276,6 +276,7 @@ function MemoryHelper._showViewer(plugin, card, helper_text, on_saved, source, o
             text = _("Close"),
             callback = function()
                 if viewer then UIManager:close(viewer) end
+                notifyClosed()
             end,
         },
     } }

@@ -584,6 +584,99 @@ local function makeAutoRateItems(plugin, refreshMenu, touchmenu_instance)
     }
 end
 
+local function makeManualAdvanceItems(plugin, refreshMenu, touchmenu_instance)
+    return {
+        {
+            text = _("Again advance delay"),
+            text_func = function()
+                local value = tonumber(plugin.settings:readSetting("manual_again_advance_delay", 5)) or 5
+                return rowValue(_("Again advance delay"), string.format(_("%ds"), value))
+            end,
+            keep_menu_open = true,
+            callback = function(submenu_instance)
+                local current = tonumber(plugin.settings:readSetting("manual_again_advance_delay", 5)) or 5
+                showNumberInput(
+                    _("Again advance delay"),
+                    _("Seconds to stay on the answer side after manually rating Again."),
+                    current, 0,
+                    function(value)
+                        value = math.floor((tonumber(value) or 5) + 0.5)
+                        plugin.settings:saveSetting("manual_again_advance_delay", value)
+                        plugin.settings:flush()
+                        refreshMenu(submenu_instance or touchmenu_instance)
+                    end
+                )
+            end,
+        },
+        {
+            text = _("Hard advance delay"),
+            text_func = function()
+                local value = tonumber(plugin.settings:readSetting("manual_hard_advance_delay", 4)) or 4
+                return rowValue(_("Hard advance delay"), string.format(_("%ds"), value))
+            end,
+            keep_menu_open = true,
+            callback = function(submenu_instance)
+                local current = tonumber(plugin.settings:readSetting("manual_hard_advance_delay", 4)) or 4
+                showNumberInput(
+                    _("Hard advance delay"),
+                    _("Seconds to stay on the answer side after manually rating Hard."),
+                    current, 0,
+                    function(value)
+                        value = math.floor((tonumber(value) or 4) + 0.5)
+                        plugin.settings:saveSetting("manual_hard_advance_delay", value)
+                        plugin.settings:flush()
+                        refreshMenu(submenu_instance or touchmenu_instance)
+                    end
+                )
+            end,
+        },
+        {
+            text = _("Good advance delay"),
+            text_func = function()
+                local value = tonumber(plugin.settings:readSetting("manual_good_advance_delay", 3)) or 3
+                return rowValue(_("Good advance delay"), string.format(_("%ds"), value))
+            end,
+            keep_menu_open = true,
+            callback = function(submenu_instance)
+                local current = tonumber(plugin.settings:readSetting("manual_good_advance_delay", 3)) or 3
+                showNumberInput(
+                    _("Good advance delay"),
+                    _("Seconds to stay on the answer side after manually rating Good."),
+                    current, 0,
+                    function(value)
+                        value = math.floor((tonumber(value) or 3) + 0.5)
+                        plugin.settings:saveSetting("manual_good_advance_delay", value)
+                        plugin.settings:flush()
+                        refreshMenu(submenu_instance or touchmenu_instance)
+                    end
+                )
+            end,
+        },
+        {
+            text = _("Easy advance delay"),
+            text_func = function()
+                local value = tonumber(plugin.settings:readSetting("manual_easy_advance_delay", 2)) or 2
+                return rowValue(_("Easy advance delay"), string.format(_("%ds"), value))
+            end,
+            keep_menu_open = true,
+            callback = function(submenu_instance)
+                local current = tonumber(plugin.settings:readSetting("manual_easy_advance_delay", 2)) or 2
+                showNumberInput(
+                    _("Easy advance delay"),
+                    _("Seconds to stay on the answer side after manually rating Easy."),
+                    current, 0,
+                    function(value)
+                        value = math.floor((tonumber(value) or 2) + 0.5)
+                        plugin.settings:saveSetting("manual_easy_advance_delay", value)
+                        plugin.settings:flush()
+                        refreshMenu(submenu_instance or touchmenu_instance)
+                    end
+                )
+            end,
+        },
+    }
+end
+
 function Settings.buildAiMenuItems(plugin)
     return {
         makeProviderMenuItem(plugin),
@@ -715,91 +808,16 @@ function Settings.buildMenuItems(plugin, default_touchmenu_instance)
             end,
         },
         {
-            text = _("Again advance delay"),
+            text = _("Manual advance delays"),
             text_func = function()
-                local value = tonumber(plugin.settings:readSetting("manual_again_advance_delay", 5)) or 5
-                return rowValue(_("Again advance delay"), string.format(_("%ds"), value))
+                local again = tonumber(plugin.settings:readSetting("manual_again_advance_delay", 5)) or 5
+                local hard = tonumber(plugin.settings:readSetting("manual_hard_advance_delay", 4)) or 4
+                local good = tonumber(plugin.settings:readSetting("manual_good_advance_delay", 3)) or 3
+                local easy = tonumber(plugin.settings:readSetting("manual_easy_advance_delay", 2)) or 2
+                return rowValue(_("Manual advance delays"), string.format(_("%d/%d/%d/%ds"), again, hard, good, easy))
             end,
-            keep_menu_open = true,
-            callback = function(touchmenu_instance)
-                local current = tonumber(plugin.settings:readSetting("manual_again_advance_delay", 5)) or 5
-                showNumberInput(
-                    _("Again advance delay"),
-                    _("Seconds to stay on the answer side after manually rating Again."),
-                    current, 0,
-                    function(value)
-                        value = math.floor((tonumber(value) or 5) + 0.5)
-                        plugin.settings:saveSetting("manual_again_advance_delay", value)
-                        plugin.settings:flush()
-                        refreshMenu(touchmenu_instance)
-                    end
-                )
-            end,
-        },
-        {
-            text = _("Hard advance delay"),
-            text_func = function()
-                local value = tonumber(plugin.settings:readSetting("manual_hard_advance_delay", 4)) or 4
-                return rowValue(_("Hard advance delay"), string.format(_("%ds"), value))
-            end,
-            keep_menu_open = true,
-            callback = function(touchmenu_instance)
-                local current = tonumber(plugin.settings:readSetting("manual_hard_advance_delay", 4)) or 4
-                showNumberInput(
-                    _("Hard advance delay"),
-                    _("Seconds to stay on the answer side after manually rating Hard."),
-                    current, 0,
-                    function(value)
-                        value = math.floor((tonumber(value) or 4) + 0.5)
-                        plugin.settings:saveSetting("manual_hard_advance_delay", value)
-                        plugin.settings:flush()
-                        refreshMenu(touchmenu_instance)
-                    end
-                )
-            end,
-        },
-        {
-            text = _("Good advance delay"),
-            text_func = function()
-                local value = tonumber(plugin.settings:readSetting("manual_good_advance_delay", 3)) or 3
-                return rowValue(_("Good advance delay"), string.format(_("%ds"), value))
-            end,
-            keep_menu_open = true,
-            callback = function(touchmenu_instance)
-                local current = tonumber(plugin.settings:readSetting("manual_good_advance_delay", 3)) or 3
-                showNumberInput(
-                    _("Good advance delay"),
-                    _("Seconds to stay on the answer side after manually rating Good."),
-                    current, 0,
-                    function(value)
-                        value = math.floor((tonumber(value) or 3) + 0.5)
-                        plugin.settings:saveSetting("manual_good_advance_delay", value)
-                        plugin.settings:flush()
-                        refreshMenu(touchmenu_instance)
-                    end
-                )
-            end,
-        },
-        {
-            text = _("Easy advance delay"),
-            text_func = function()
-                local value = tonumber(plugin.settings:readSetting("manual_easy_advance_delay", 2)) or 2
-                return rowValue(_("Easy advance delay"), string.format(_("%ds"), value))
-            end,
-            keep_menu_open = true,
-            callback = function(touchmenu_instance)
-                local current = tonumber(plugin.settings:readSetting("manual_easy_advance_delay", 2)) or 2
-                showNumberInput(
-                    _("Easy advance delay"),
-                    _("Seconds to stay on the answer side after manually rating Easy."),
-                    current, 0,
-                    function(value)
-                        value = math.floor((tonumber(value) or 2) + 0.5)
-                        plugin.settings:saveSetting("manual_easy_advance_delay", value)
-                        plugin.settings:flush()
-                        refreshMenu(touchmenu_instance)
-                    end
-                )
+            sub_item_table_func = function(touchmenu_instance)
+                return makeManualAdvanceItems(plugin, refreshMenu, touchmenu_instance)
             end,
         },
         {
