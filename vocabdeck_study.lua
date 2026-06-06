@@ -41,6 +41,10 @@ local StudyScreen = InputContainer:extend{}
 local LEECH_THRESHOLD = 8
 local UNLEECH_THRESHOLD = 2
 local LEARN_AHEAD_SECONDS = 20 * 60  -- 20 minutes
+local DEFAULT_AUTO_EASY_CUTOFF = 5
+local DEFAULT_AUTO_GOOD_CUTOFF = 10
+local DEFAULT_AUTO_HARD_CUTOFF = 25
+local DEFAULT_AUTO_ANSWER_DELAY = 4
 
 -- ── Text assembly helpers ────────────────────────────────────────────────
 
@@ -362,6 +366,41 @@ function StudyScreen:refresh()
     UIManager:setDirty(self, function() return "ui", self.dimen end)
 end
 
+function StudyScreen:invalidateAutoRate()
+    self.auto_rate_token = (self.auto_rate_token or 0) + 1
+end
+
+function StudyScreen:isAutoRateEnabled()
+    local plugin = self.plugin
+    return plugin
+        and plugin:readSetting("study_timer_enabled", true) ~= false
+        and plugin:readSetting("auto_rate_enabled", false) == true
+end
+
+function StudyScreen:getAutoRateConfig()
+    local plugin = self.plugin
+    local easy = plugin and tonumber(plugin:readSetting("auto_rate_easy_cutoff", DEFAULT_AUTO_EASY_CUTOFF))
+        or DEFAULT_AUTO_EASY_CUTOFF
+    local good = plugin and tonumber(plugin:readSetting("auto_rate_good_cutoff", DEFAULT_AUTO_GOOD_CUTOFF))
+        or DEFAULT_AUTO_GOOD_CUTOFF
+    local hard = plugin and tonumber(plugin:readSetting("auto_rate_hard_cutoff", DEFAULT_AUTO_HARD_CUTOFF))
+        or DEFAULT_AUTO_HARD_CUTOFF
+    local delay = plugin and tonumber(plugin:readSetting("auto_rate_answer_delay", DEFAULT_AUTO_ANSWER_DELAY))
+        or DEFAULT_AUTO_ANSWER_DELAY
+
+    easy = math.max(1, math.floor((easy or DEFAULT_AUTO_EASY_CUTOFF) + 0.5))
+    good = math.max(easy, math.floor((good or DEFAULT_AUTO_GOOD_CUTOFF) + 0.5))
+    hard = math.max(good, math.floor((hard or DEFAULT_AUTO_HARD_CUTOFF) + 0.5))
+    delay = math.max(0, math.floor((delay or DEFAULT_AUTO_ANSWER_DELAY) + 0.5))
+
+    return {
+        easy = easy,
+        good = good,
+        hard = hard,
+        delay = delay,
+    }
+end
+
 function StudyScreen:setStudyTitle(title)
     self.book_title = title or _("Study")
     if self.front_title_widget then
@@ -443,6 +482,7 @@ local function todayKey()
 end
 
 function StudyScreen:loadNextCard()
+    self:invalidateAutoRate()
     local plugin = self.plugin
     local randomize = plugin and plugin:readSetting("randomize_cards", false) or false
     local daily_new_limit = plugin and (tonumber(plugin:readSetting("daily_new_cards_limit", 20)) or 20) or 20
@@ -513,9 +553,28 @@ function StudyScreen:onShowOrNext()
     if not self.showing_back then
         self.showing_back = true
         self.elapsed = os.time() - (self.timer_start or os.time())
+
+        -- Determine auto-rate label for the timer display.
+        local auto_rate_label = ""
+        local auto_enabled = self:isAutoRateEnabled()
+        local auto_config = self:getAutoRateConfig()
+        if auto_enabled and self.elapsed <= auto_config.hard then
+            if self.elapsed <= auto_config.easy then
+                auto_rate_label = "Easy"
+            elseif self.elapsed <= auto_config.good then
+                auto_rate_label = "Good"
+            else
+                auto_rate_label = "Hard"
+            end
+        end
+
         if self.timer_widget then
             if self.plugin and self.plugin:readSetting("study_timer_enabled", true) ~= false then
-                self.timer_widget:setText(string.format("\226\143\177 %ds", self.elapsed))
+                local label = string.format("\226\143\177 %ds", self.elapsed)
+                if auto_rate_label ~= "" then
+                    label = label .. " \194\183 " .. _(auto_rate_label)
+                end
+                self.timer_widget:setText(label)
             else
                 self.timer_widget:setText("")
             end
@@ -533,11 +592,27 @@ function StudyScreen:onShowOrNext()
         self:setRatingButtonsEnabled(true)
         self[1] = self.back_layout
         self:refresh()
+
+        -- Auto-rate based on recall time. Rating buttons remain as override.
+        if auto_rate_label ~= "" then
+            local auto_card_id = self.current_card and self.current_card.id
+            local auto_token = self.auto_rate_token
+            local rating = auto_rate_label:lower()
+            UIManager:scheduleIn(auto_config.delay, function()
+                if self.showing_back
+                    and self.current_card
+                    and self.current_card.id == auto_card_id
+                    and self.auto_rate_token == auto_token then
+                    self:onRate(rating)
+                end
+            end)
+        end
     end
 end
 
 function StudyScreen:showFullText()
     if not self.card_full_text or self.card_full_text == "" then return end
+    self:invalidateAutoRate()
     UIManager:show(TextViewer:new{
         title = _("Full text"),
         text = self.card_full_text,
@@ -598,11 +673,13 @@ function StudyScreen:onRefetchAIData()
 end
 
 function StudyScreen:showActionMenu()
+    self:invalidateAutoRate()
     StudyActions.showMenu(self)
 end
 
 function StudyScreen:onRate(rating)
     if not self.current_card then return end
+    self:invalidateAutoRate()
     local card = self.current_card
     local was_leech = (card.leech or 0) ~= 0
     local updated = DB.updateCardScheduling(card, rating, nil, self:getDesiredRetention(),
@@ -655,6 +732,7 @@ function StudyScreen:onRate(rating)
 end
 
 function StudyScreen:showBookSelection()
+    self:invalidateAutoRate()
     local study = self
     local menu
     local screen = Device.screen
@@ -777,6 +855,7 @@ function StudyScreen:showBookSelection()
 end
 
 function StudyScreen:onClose()
+    self:invalidateAutoRate()
     UIManager:close(self)
     -- Request a full refresh so the reader screen behind us is redrawn
     -- cleanly (no leftover pixels from the deck screen).
@@ -785,6 +864,7 @@ function StudyScreen:onClose()
 end
 
 function StudyScreen:onCloseWidget()
+    self:invalidateAutoRate()
     -- Also fires on system dismissals (e.g. the user presses Back or switches
     -- documents). Same motivation as onClose.
     UIManager:setDirty(nil, "full")

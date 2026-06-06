@@ -19,6 +19,7 @@ local Actions = {}
 
 function Actions.deleteCard(study)
     if not study.current_card then return end
+    if study.invalidateAutoRate then study:invalidateAutoRate() end
     UIManager:show(ConfirmBox:new{
         text = _("Delete this card?"),
         ok_text = _("Delete"),
@@ -42,6 +43,7 @@ end
 
 function Actions.markKnown(study)
     if not study.current_card then return end
+    if study.invalidateAutoRate then study:invalidateAutoRate() end
     UIManager:show(ConfirmBox:new{
         text = _("Mark this card as known and hide it from study?"),
         ok_text = _("Mark as known"),
@@ -69,6 +71,7 @@ end
 
 function Actions.resetCard(study)
     if not study.current_card then return end
+    if study.invalidateAutoRate then study:invalidateAutoRate() end
     UIManager:show(ConfirmBox:new{
         text = _("Reset this card to new?"),
         ok_text = _("Reset"),
