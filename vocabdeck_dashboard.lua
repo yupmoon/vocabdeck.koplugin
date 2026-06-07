@@ -13,6 +13,7 @@ local GestureRange = require("ui/gesturerange")
 local Geom = require("ui/geometry")
 local HorizontalGroup = require("ui/widget/horizontalgroup")
 local HorizontalSpan = require("ui/widget/horizontalspan")
+local IconWidget = require("ui/widget/iconwidget")
 local InfoMessage = require("ui/widget/infomessage")
 local InputContainer = require("ui/widget/container/inputcontainer")
 local LineWidget = require("ui/widget/linewidget")
@@ -45,11 +46,10 @@ local MAX_BOOK_ROWS = 3
 local ICON_WEAK = "\226\154\160"      -- warning sign
 local ICON_MISSING = "\226\150\163"   -- document-like outline
 local ICON_LEECH = "\226\134\187" -- refresh/loop
-local ICON_STUDY = "\226\151\135"
-local ICON_CARDS = "\226\150\164"
-local ICON_IMPORT = "\226\135\167"
-local ICON_SETTINGS = "\226\154\153"
 local CHEVRON = "\226\128\186"
+local MODULE_DIR = (debug.getinfo(1, "S").source or ""):match("^@(.*/)")
+    or "plugins/vocabdeck.koplugin/"
+local DASHBOARD_ICON_DIR = MODULE_DIR .. "icons/dashboard/"
 
 local function n(value)
     return tonumber(value) or 0
@@ -156,6 +156,8 @@ function DashboardScreen:init()
     end
     self.data = getCachedData() or getLastCachedData() or emptyData(self.plugin, true)
     self.page_padding = Screen:scaleBySize(30)
+    self.page_padding_top = Screen:scaleBySize(24)
+    self.page_padding_bottom = Screen:scaleBySize(8)
     self.tile_gap = Screen:scaleBySize(10)
     self.section_gap = Screen:scaleBySize(12)
     self.card_radius = Screen:scaleBySize(12)
@@ -165,7 +167,8 @@ function DashboardScreen:init()
     self.topbar_h = Screen:scaleBySize(38)
     self.section_h = Screen:scaleBySize(34)
     self.stat_h = Screen:scaleBySize(96)
-    self.button_h = Screen:scaleBySize(58)
+    self.button_h = Screen:scaleBySize(88)
+    self.bottom_icon_size = Screen:scaleBySize(48)
     self.meta_font_size = 13
     self:rebuildContent()
     self:scheduleRefresh()
@@ -184,7 +187,7 @@ function DashboardScreen:updateRowHeight()
     local fixed_h = self.topbar_h + self.tile_gap + self.stat_h
         + self.section_gap * 4 + self.section_h * 3 + self.button_h
         + panel_extra
-    local available_h = self.dimen.h - self.page_padding * 2
+    local available_h = self.dimen.h - self.page_padding_top - self.page_padding_bottom
     self.row_h = math.floor((available_h - fixed_h) / visible_rows)
     self.row_h = math.max(Screen:scaleBySize(34), math.min(Screen:scaleBySize(44), self.row_h))
 end
@@ -216,7 +219,11 @@ function DashboardScreen:rebuildContent()
 
     self[1] = FrameContainer:new{
         height = self.dimen.h,
-        padding = self.page_padding,
+        padding = 0,
+        padding_left = self.page_padding,
+        padding_right = self.page_padding,
+        padding_top = self.page_padding_top,
+        padding_bottom = self.page_padding_bottom,
         bordersize = 0,
         background = Blitbuffer.COLOR_WHITE,
         content,
@@ -605,6 +612,57 @@ function DashboardScreen:makeButton(text, width, callback)
     return button
 end
 
+function DashboardScreen:makeBottomButton(icon_file, label, width, callback)
+    local padding = 0
+    local inner_w = width - padding * 2
+    local inner_h = self.button_h - padding * 2
+    local icon_h = math.floor(inner_h * 0.68)
+    local label_h = inner_h - icon_h
+    local icon_size = math.min(self.bottom_icon_size, icon_h, inner_w)
+    local button = InputContainer:new{
+        dimen = Geom:new{ x = 0, y = 0, w = width, h = self.button_h },
+        CenterContainer:new{
+            dimen = Geom:new{ w = inner_w, h = inner_h },
+            VerticalGroup:new{
+                CenterContainer:new{
+                    dimen = Geom:new{ w = inner_w, h = icon_h },
+                    IconWidget:new{
+                        file = icon_file,
+                        width = icon_size,
+                        height = icon_size,
+                        alpha = true,
+                    },
+                },
+                CenterContainer:new{
+                    dimen = Geom:new{ w = inner_w, h = label_h },
+                        TextBoxWidget:new{
+                            text = label,
+                            face = Font:getFace("smallinfofont", 13),
+                            width = inner_w,
+                            alignment = "center",
+                            height_overflow_show_ellipsis = true,
+                    },
+                },
+            },
+        },
+    }
+    if Device:isTouchDevice() then
+        button.ges_events = {
+            Tap = {
+                GestureRange:new{
+                    ges = "tap",
+                    range = button.dimen,
+                },
+            },
+        }
+        button.onTap = function()
+            if callback then callback() end
+            return true
+        end
+    end
+    return button
+end
+
 function DashboardScreen:makeTappableHeader(text, callback)
     local header = InputContainer:new{
         dimen = Geom:new{ x = 0, y = 0, w = self.width, h = self.section_h },
@@ -755,15 +813,17 @@ end
 
 function DashboardScreen:buildBottomButtons()
     local gap = self.tile_gap
-    local button_w = math.floor((self.width - gap * 3) / 4)
+    local button_w = math.floor((self.width - gap * 4) / 5)
     return HorizontalGroup:new{
-        self:makeButton(ICON_STUDY .. " " .. _("Study"), button_w, function() self:openStudy(self.data.first_due_language or self.data.first_language) end),
+        self:makeBottomButton(DASHBOARD_ICON_DIR .. "study.svg", _("Study"), button_w, function() self:openStudy(self.data.first_due_language or self.data.first_language) end),
         HorizontalSpan:new{ width = gap },
-        self:makeButton(ICON_CARDS .. " " .. _("All cards"), button_w, function() self:openAllCards(self.data.first_language) end),
+        self:makeBottomButton(DASHBOARD_ICON_DIR .. "cards.svg", _("All cards"), button_w, function() self:openAllCards(self.data.first_language) end),
         HorizontalSpan:new{ width = gap },
-        self:makeButton(ICON_IMPORT .. " " .. _("Import"), button_w, function() self:openImport() end),
+        self:makeBottomButton(DASHBOARD_ICON_DIR .. "import.svg", _("Import"), button_w, function() self:openImport() end),
         HorizontalSpan:new{ width = gap },
-        self:makeButton(ICON_SETTINGS .. " " .. _("Settings"), self.width - button_w * 3 - gap * 3, function() self:openSettings() end),
+        self:makeBottomButton(DASHBOARD_ICON_DIR .. "settings.svg", _("Settings"), button_w, function() self:openSettings() end),
+        HorizontalSpan:new{ width = gap },
+        self:makeBottomButton(DASHBOARD_ICON_DIR .. "close.svg", _("Close"), self.width - button_w * 4 - gap * 4, function() self:onClose() end),
     }
 end
 
