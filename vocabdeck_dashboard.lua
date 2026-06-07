@@ -815,13 +815,33 @@ end
 
 function DashboardScreen:openSettings()
     local screen = Device.screen
-    UIManager:show(Menu:new{
+    local settings_menu
+    local refresh_proxy = {
+        updateItems = function()
+            if settings_menu and settings_menu.updateItems then
+                settings_menu:updateItems()
+            end
+        end,
+    }
+    local function materializeSubmenus(items)
+        if not items then return items end
+        for _, item in ipairs(items) do
+            if item.sub_item_table_func and not item.sub_item_table then
+                item.sub_item_table = item.sub_item_table_func(refresh_proxy)
+            end
+            materializeSubmenus(item.sub_item_table)
+        end
+        return items
+    end
+    local settings_items = materializeSubmenus(SettingsModule.buildMenuItems(self.plugin, refresh_proxy))
+    settings_menu = Menu:new{
         title = _("Settings"),
-        item_table = SettingsModule.buildMenuItems(self.plugin),
+        item_table = settings_items,
         covers_fullscreen = true,
         width = math.floor(screen:getWidth() * 0.9),
         height = math.floor(screen:getHeight() * 0.9),
-    })
+    }
+    UIManager:show(settings_menu)
 end
 
 function DashboardScreen:onClose()

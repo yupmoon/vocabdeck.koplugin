@@ -238,6 +238,10 @@ local function readBool(plugin, key, default)
     return v and true or false
 end
 
+local function boolRowValue(plugin, key, default, label)
+    return rowValue(label, readBool(plugin, key, default) and _("On") or _("Off"))
+end
+
 local LEECH_ACTION_LABELS = {
     tag = _("Tag only"),
     suspend = _("Suspend card"),
@@ -482,6 +486,9 @@ local function makeAutoRateItems(plugin, refreshMenu, touchmenu_instance)
     return {
         {
             text = _("Enable auto-rate"),
+            text_func = function()
+                return boolRowValue(plugin, "auto_rate_enabled", false, _("Enable auto-rate"))
+            end,
             checked_func = function()
                 return readBool(plugin, "auto_rate_enabled", false)
             end,
@@ -743,6 +750,9 @@ function Settings.buildMenuItems(plugin, default_touchmenu_instance)
         },
         {
             text = _("Prompt to edit word/phrase before saving"),
+            text_func = function()
+                return boolRowValue(plugin, "ask_phrase_edit_on_add", true, _("Prompt to edit word/phrase before saving"))
+            end,
             checked_func = function()
                 return readBool(plugin, "ask_phrase_edit_on_add", true)
             end,
@@ -756,6 +766,9 @@ function Settings.buildMenuItems(plugin, default_touchmenu_instance)
         },
         {
             text = _("Prompt for note before saving"),
+            text_func = function()
+                return boolRowValue(plugin, "ask_note_on_add", true, _("Prompt for note before saving"))
+            end,
             checked_func = function()
                 return readBool(plugin, "ask_note_on_add", true)
             end,
@@ -769,6 +782,9 @@ function Settings.buildMenuItems(plugin, default_touchmenu_instance)
         },
         {
             text = _("Grammar helper"),
+            text_func = function()
+                return boolRowValue(plugin, "grammar_helper_enabled", false, _("Grammar helper"))
+            end,
             checked_func = function()
                 return readBool(plugin, "grammar_helper_enabled", false)
             end,
@@ -786,6 +802,9 @@ function Settings.buildMenuItems(plugin, default_touchmenu_instance)
         },
         {
             text = _("Show answer timer in study"),
+            text_func = function()
+                return boolRowValue(plugin, "study_timer_enabled", true, _("Show answer timer in study"))
+            end,
             checked_func = function()
                 return readBool(plugin, "study_timer_enabled", true)
             end,
@@ -799,6 +818,9 @@ function Settings.buildMenuItems(plugin, default_touchmenu_instance)
         },
         {
             text = _("Study reverse (meaning → phrase)"),
+            text_func = function()
+                return boolRowValue(plugin, "study_reverse", false, _("Study reverse (meaning → phrase)"))
+            end,
             checked_func = function()
                 return readBool(plugin, "study_reverse", false)
             end,
@@ -849,6 +871,9 @@ function Settings.buildMenuItems(plugin, default_touchmenu_instance)
         },
         {
             text = _("Randomize cards with same due date"),
+            text_func = function()
+                return boolRowValue(plugin, "randomize_cards", false, _("Randomize cards with same due date"))
+            end,
             checked_func = function()
                 return readBool(plugin, "randomize_cards", false)
             end,
@@ -939,6 +964,9 @@ function Settings.buildMenuItems(plugin, default_touchmenu_instance)
         },
         {
             text = _("Study only enriched cards"),
+            text_func = function()
+                return boolRowValue(plugin, "require_enriched_for_study", true, _("Study only enriched cards"))
+            end,
             checked_func = function()
                 return readBool(plugin, "require_enriched_for_study", true)
             end,
@@ -952,6 +980,9 @@ function Settings.buildMenuItems(plugin, default_touchmenu_instance)
         },
         {
             text = _("Show field names in study cards"),
+            text_func = function()
+                return boolRowValue(plugin, "show_section_labels", true, _("Show field names in study cards"))
+            end,
             checked_func = function()
                 return readBool(plugin, "show_section_labels", true)
             end,
