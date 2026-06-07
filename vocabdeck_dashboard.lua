@@ -33,7 +33,7 @@ local StudyEntry = require("vocabdeck_study_entry")
 local Dashboard = {}
 
 local DASHBOARD_CACHE_TTL = 60  -- seconds
-local _dashboard_cache = nil    -- { data, expires_at }
+local _dashboard_cache = nil    -- { data, expires_at, version }
 
 local DashboardScreen = InputContainer:extend{
     plugin = nil,
@@ -97,6 +97,22 @@ local function dueFromCounts(counts)
     return n(counts and counts.new) + n(counts and counts.learning) + n(counts and counts.review)
 end
 
+local function emptyData(plugin, loading)
+    local active_language = DB.getActiveLanguage()
+    return {
+        summary = {},
+        languages = {},
+        books = {},
+        first_due_language = nil,
+        first_language = active_language,
+        missing_ai_language = nil,
+        weak_language = nil,
+        leech_language = nil,
+        suspended_language = nil,
+        loading = loading and true or false,
+    }
+end
+
 local function countCardsByState(state, include_known)
     local ok, count = pcall(DB.countCards,
         nil, false, false, "", os.time(), nil, nil,
@@ -142,7 +158,7 @@ local function collectData(plugin)
             total = n(summary.total),
             due = due,
             new = n(counts.new),
-            reviewed = n(summary.reviewed),
+            mature = n(summary.mature),
         }
         data.languages[#data.languages + 1] = language_row
         if (n(summary.pending) + n(summary.failed)) > 0 and not data.missing_ai_language then
@@ -161,13 +177,12 @@ local function collectData(plugin)
         local ok_books, books = pcall(DB.listBooks)
         books = ok_books and books or {}
         for _, book in ipairs(books) do
-            local book_counts = getQueueCounts(plugin, book.id, language, require_enriched)
             data.books[#data.books + 1] = {
                 id = book.id,
                 language = language,
                 title = book.title ~= "" and book.title or book.filepath,
                 total = n(book.card_count),
-                due = dueFromCounts(book_counts),
+                due = 0,
             }
         end
     end
@@ -183,7 +198,18 @@ local function collectData(plugin)
         end
     end
     table.sort(data.books, function(a, b)
+        if a.total ~= b.total then return a.total > b.total end
+        return tostring(a.title):lower() < tostring(b.title):lower()
+    end)
+    for i = 1, math.min(#data.books, MAX_BOOK_ROWS) do
+        local book = data.books[i]
+        DB.setLanguage(book.language)
+        local book_counts = getQueueCounts(plugin, book.id, book.language, require_enriched)
+        book.due = dueFromCounts(book_counts)
+    end
+    table.sort(data.books, function(a, b)
         if a.due ~= b.due then return a.due > b.due end
+        if a.total ~= b.total then return a.total > b.total end
         return tostring(a.title):lower() < tostring(b.title):lower()
     end)
 
@@ -191,19 +217,43 @@ local function collectData(plugin)
     return data
 end
 
-local function getCachedData(plugin)
-    if _dashboard_cache and _dashboard_cache.expires_at > os.time() then
+local function getCacheVersion()
+    if DB.getSummaryCacheVersion then
+        return DB.getSummaryCacheVersion()
+    end
+    return 0
+end
+
+local function isCacheFresh()
+    return _dashboard_cache
+        and _dashboard_cache.expires_at > os.time()
+        and _dashboard_cache.version == getCacheVersion()
+end
+
+local function getCachedData()
+    if isCacheFresh() then
         return _dashboard_cache.data
     end
-    local data = collectData(plugin)
-    _dashboard_cache = { data = data, expires_at = os.time() + DASHBOARD_CACHE_TTL }
-    return data
+    return nil
+end
+
+local function getLastCachedData()
+    return _dashboard_cache and _dashboard_cache.data or nil
+end
+
+local function setCachedData(data)
+    _dashboard_cache = {
+        data = data,
+        expires_at = os.time() + DASHBOARD_CACHE_TTL,
+        version = getCacheVersion(),
+    }
 end
 
 function DashboardScreen:init()
     local Screen = Device.screen
     self.dimen = Geom:new{ x = 0, y = 0, w = Screen:getWidth(), h = Screen:getHeight() }
     self.covers_fullscreen = true
+    self.closed = false
     if Device:hasKeys() then
         self.key_events.Close = { { Device.input.group.Back } }
     end
@@ -214,7 +264,7 @@ function DashboardScreen:init()
         }
     end
 
-    self.data = getCachedData(self.plugin)
+    self.data = getCachedData() or getLastCachedData() or emptyData(self.plugin, true)
     self.page_padding = Screen:scaleBySize(30)
     self.tile_gap = Screen:scaleBySize(10)
     self.section_gap = Screen:scaleBySize(12)
@@ -226,20 +276,25 @@ function DashboardScreen:init()
     self.button_h = Screen:scaleBySize(58)
     self.meta_font_size = 13
     self.top_icon_font_size = 28
-    local visible_rows = math.min(#(self.data.languages or {}), MAX_LANGUAGE_ROWS)
-        + math.min(#(self.data.books or {}), MAX_BOOK_ROWS)
-        + 3
+    self:rebuildContent()
+    self:scheduleRefresh()
+end
+
+function DashboardScreen:updateRowHeight()
+    local Screen = Device.screen
+    local language_rows = self.data.loading and 1 or math.min(#(self.data.languages or {}), MAX_LANGUAGE_ROWS)
+    local book_rows = self.data.loading and 1 or math.min(#(self.data.books or {}), MAX_BOOK_ROWS)
+    local visible_rows = language_rows + book_rows + 3
     visible_rows = math.max(visible_rows, 1)
     local fixed_h = self.topbar_h + self.tile_gap + self.stat_h
         + self.section_gap * 4 + self.section_h * 3 + self.button_h
     local available_h = self.dimen.h - self.page_padding * 2
     self.row_h = math.floor((available_h - fixed_h) / visible_rows)
     self.row_h = math.max(Screen:scaleBySize(34), math.min(Screen:scaleBySize(44), self.row_h))
-
-    self:rebuildContent()
 end
 
 function DashboardScreen:rebuildContent()
+    self:updateRowHeight()
     local content = VerticalGroup:new{}
     table.insert(content, self:buildTopBar())
     table.insert(content, VerticalSpan:new{ width = self.tile_gap })
@@ -273,9 +328,37 @@ function DashboardScreen:rebuildContent()
 end
 
 function DashboardScreen:onShow()
-    self.data = getCachedData(self.plugin)
-    self:rebuildContent()
+    local cached = getCachedData() or getLastCachedData()
+    if cached then
+        self.data = cached
+        self:rebuildContent()
+    end
+    -- Returning from Study or All cards can change due/weak/AI counts while the
+    -- dashboard cache is still inside its TTL. Paint cached data first, then
+    -- force one async refresh so the visible numbers catch up.
+    self:scheduleRefresh(true)
     UIManager:setDirty(self, "partial")
+end
+
+function DashboardScreen:scheduleRefresh(force)
+    if self.refresh_scheduled or (not force and isCacheFresh()) then return end
+    self.refresh_scheduled = true
+    UIManager:nextTick(function()
+        self.refresh_scheduled = false
+        if self.closed or not self[1] then return end
+        local ok, data = pcall(collectData, self.plugin)
+        if not ok or not data then
+            UIManager:show(InfoMessage:new{
+                text = _("Dashboard could not be loaded."),
+                timeout = 3,
+            })
+            return
+        end
+        setCachedData(data)
+        self.data = data
+        self:rebuildContent()
+        UIManager:setDirty(self, "ui")
+    end)
 end
 
 function DashboardScreen:onTap(_, ges)
@@ -411,10 +494,7 @@ end
 function DashboardScreen:languageProgress(row)
     local total = n(row and row.total)
     if total <= 0 then return 0, "0%" end
-    local percent = math.floor(n(row.reviewed) * 100 / total + 0.5)
-    if n(row.due) + n(row.new) > 0 then
-        percent = math.min(percent, 95)
-    end
+    local percent = math.floor(n(row.mature) * 100 / total + 0.5)
     percent = math.max(0, math.min(100, percent))
     return percent, tostring(percent) .. "%"
 end
@@ -649,6 +729,9 @@ end
 
 function DashboardScreen:buildLanguageRows()
     local rows = {}
+    if self.data.loading then
+        return { self:makePlainRow(_("Loading..."), nil) }
+    end
     if #self.data.languages == 0 then
         return { self:makePlainRow(_("No cards yet"), nil) }
     end
@@ -661,6 +744,9 @@ end
 
 function DashboardScreen:buildBookRows()
     local rows = {}
+    if self.data.loading then
+        return { self:makePlainRow(_("Loading..."), nil) }
+    end
     if #self.data.books == 0 then
         return { self:makePlainRow(_("No books with cards"), nil) }
     end
@@ -672,6 +758,13 @@ function DashboardScreen:buildBookRows()
 end
 
 function DashboardScreen:buildAttentionRows()
+    if self.data.loading then
+        return {
+            self:makePlainRow(_("Loading..."), nil),
+            self:makePlainRow("", nil),
+            self:makePlainRow("", nil),
+        }
+    end
     local summary = self.data.summary or {}
     local weak = n(summary.weak_cards)
     local missing = n(summary.missing_ai)
@@ -813,6 +906,7 @@ function DashboardScreen:openSettings()
 end
 
 function DashboardScreen:onClose()
+    self.closed = true
     UIManager:close(self)
     return true
 end
@@ -823,6 +917,10 @@ end
 
 function Dashboard.show(plugin)
     UIManager:show(DashboardScreen:new{ plugin = plugin })
+end
+
+function Dashboard.invalidateCache()
+    _dashboard_cache = nil
 end
 
 return Dashboard

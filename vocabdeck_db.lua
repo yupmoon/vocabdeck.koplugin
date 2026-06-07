@@ -1593,9 +1593,15 @@ end
 
 local SUMMARY_CACHE_TTL = 60 -- seconds
 local _summary_cache = {}    -- key -> { expires_at, value }
+local _summary_cache_version = 0
 
 function DB.invalidateSummaryCache()
     _summary_cache = {}
+    _summary_cache_version = _summary_cache_version + 1
+end
+
+function DB.getSummaryCacheVersion()
+    return _summary_cache_version
 end
 
 function DB.getSummary(book_id, require_enriched_due)
