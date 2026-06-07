@@ -50,8 +50,6 @@ local ICON_CARDS = "\226\150\164"
 local ICON_IMPORT = "\226\135\167"
 local ICON_SETTINGS = "\226\154\153"
 local CHEVRON = "\226\128\186"
-local MENU_ICON = "\226\152\176"
-local CLOSE_ICON = "\195\151"
 
 local function n(value)
     return tonumber(value) or 0
@@ -152,23 +150,23 @@ function DashboardScreen:init()
     end
     if Device:isTouchDevice() then
         self.ges_events = self.ges_events or {}
-        self.ges_events.Tap = {
-            GestureRange:new{ ges = "tap", range = self.dimen },
+        self.ges_events.Swipe = {
+            GestureRange:new{ ges = "swipe", range = self.dimen },
         }
     end
-
     self.data = getCachedData() or getLastCachedData() or emptyData(self.plugin, true)
     self.page_padding = Screen:scaleBySize(30)
     self.tile_gap = Screen:scaleBySize(10)
     self.section_gap = Screen:scaleBySize(12)
+    self.card_radius = Screen:scaleBySize(12)
+    self.progress_radius = Size.radius.default
     self.width = self.dimen.w - self.page_padding * 2
     self.left_margin = 0
-    self.topbar_h = Screen:scaleBySize(52)
+    self.topbar_h = Screen:scaleBySize(38)
     self.section_h = Screen:scaleBySize(34)
     self.stat_h = Screen:scaleBySize(96)
     self.button_h = Screen:scaleBySize(58)
     self.meta_font_size = 13
-    self.top_icon_font_size = 28
     self:rebuildContent()
     self:scheduleRefresh()
 end
@@ -179,8 +177,13 @@ function DashboardScreen:updateRowHeight()
     local book_rows = self.data.loading and 1 or math.min(#(self.data.books or {}), MAX_BOOK_ROWS)
     local visible_rows = language_rows + book_rows + 3
     visible_rows = math.max(visible_rows, 1)
+    local grouped_panel_count = 3
+    local divider_count = math.max(0, language_rows - 1) + math.max(0, book_rows - 1) + 2
+    local panel_extra = grouped_panel_count * (Size.padding.small * 2 + Size.border.thin * 2)
+        + divider_count * Size.line.thin
     local fixed_h = self.topbar_h + self.tile_gap + self.stat_h
         + self.section_gap * 4 + self.section_h * 3 + self.button_h
+        + panel_extra
     local available_h = self.dimen.h - self.page_padding * 2
     self.row_h = math.floor((available_h - fixed_h) / visible_rows)
     self.row_h = math.max(Screen:scaleBySize(34), math.min(Screen:scaleBySize(44), self.row_h))
@@ -207,7 +210,7 @@ function DashboardScreen:rebuildContent()
     for _, row in ipairs(self:buildBookRows()) do
         table.insert(content, row)
     end
-    self:addSection(content, _("Attention"), self:buildAttentionRows())
+    self:addSection(content, _("Attention"), { self:buildAttentionRows() })
     table.insert(content, VerticalSpan:new{ width = self.section_gap })
     table.insert(content, self:buildBottomButtons())
 
@@ -254,18 +257,13 @@ function DashboardScreen:scheduleRefresh(force)
     end)
 end
 
-function DashboardScreen:onTap(_, ges)
-    local pos = ges and ges.pos
-    if not pos then return false end
-    local top_y = 0
-    local bottom_y = self.page_padding + self.topbar_h
-    if pos.y >= top_y and pos.y <= bottom_y then
-        if pos.x >= self.dimen.w - self.page_padding - self.topbar_h - self.tile_gap then
-            return self:onClose()
-        elseif pos.x <= self.page_padding + self.topbar_h + self.tile_gap then
-            self:openSettings()
-            return true
-        end
+function DashboardScreen:onSwipe(_, ges)
+    if not ges or ges.direction ~= "south" then
+        return false
+    end
+    local menu = self.plugin and self.plugin.ui and self.plugin.ui.menu
+    if menu and menu.onSwipeShowMenu then
+        return menu:onSwipeShowMenu(ges) and true or false
     end
     return false
 end
@@ -282,52 +280,14 @@ function DashboardScreen:makeTextBox(text, width, height, face, alignment, size)
 end
 
 function DashboardScreen:buildTopBar()
-    local icon_w = self.topbar_h
-    local title_w = self.width - icon_w * 2
-    local menu_button = self:makeTopButton(MENU_ICON, icon_w, function() self:openSettings() end)
-    local title = CenterContainer:new{
-        dimen = Geom:new{ w = title_w, h = self.topbar_h },
-            TextWidget:new{
-                text = _("VocabDeck"),
-                face = Font:getFace("cfont"),
-                bold = true,
-            },
-    }
-    local close_button = self:makeTopButton(CLOSE_ICON, icon_w, function() self:onClose() end)
-    return HorizontalGroup:new{
+    return CenterContainer:new{
         dimen = Geom:new{ w = self.width, h = self.topbar_h },
-        menu_button,
-        title,
-        close_button,
-    }
-end
-
-function DashboardScreen:makeTopButton(text, width, callback)
-    local button = InputContainer:new{
-        dimen = Geom:new{ x = 0, y = 0, w = width, h = self.topbar_h },
-        CenterContainer:new{
-            dimen = Geom:new{ w = width, h = self.topbar_h },
-            TextWidget:new{
-                text = text,
-                face = Font:getFace("cfont", self.top_icon_font_size),
-            },
+        TextWidget:new{
+            text = _("VocabDeck"),
+            face = Font:getFace("cfont"),
+            bold = true,
         },
     }
-    if Device:isTouchDevice() then
-        button.ges_events = {
-            Tap = {
-                GestureRange:new{
-                    ges = "tap",
-                    range = button.dimen,
-                },
-            },
-        }
-        button.onTap = function()
-            if callback then callback() end
-            return true
-        end
-    end
-    return button
 end
 
 function DashboardScreen:makeStatCell(label, value, width, callback)
@@ -338,6 +298,7 @@ function DashboardScreen:makeStatCell(label, value, width, callback)
             dimen = Geom:new{ w = width, h = self.stat_h },
             padding = padding,
             bordersize = Size.border.thin,
+            radius = self.card_radius,
             background = Blitbuffer.COLOR_WHITE,
             CenterContainer:new{
                 dimen = Geom:new{ w = width - padding * 2, h = self.stat_h - padding * 2 },
@@ -406,6 +367,7 @@ function DashboardScreen:makeProgressBox(value, total, width)
         dimen = Geom:new{ w = width, h = height },
         padding = 0,
         bordersize = Size.border.thin,
+        radius = self.progress_radius,
         background = Blitbuffer.COLOR_WHITE,
         CenterContainer:new{
             dimen = Geom:new{ w = inner_w, h = inner_h },
@@ -429,6 +391,7 @@ function DashboardScreen:makeRow(content, callback)
             dimen = Geom:new{ x = 0, y = 0, w = self.width, h = self.row_h },
             padding = padding,
             bordersize = Size.border.thin,
+            radius = self.card_radius,
             background = Blitbuffer.COLOR_WHITE,
             content,
         },
@@ -473,9 +436,62 @@ function DashboardScreen:makeColumnText(text, width, face, alignment, size)
     }
 end
 
-function DashboardScreen:makeLanguageRow(row)
-    local padding = Size.padding.small
-    local inner_w = self.width - padding * 2
+function DashboardScreen:makePanelRow(content, callback, width)
+    width = width or self.panel_inner_w or self.width
+    local row = InputContainer:new{
+        dimen = Geom:new{ x = 0, y = 0, w = width, h = self.row_h },
+        content,
+    }
+    if Device:isTouchDevice() then
+        row.ges_events = {
+            Tap = {
+                GestureRange:new{
+                    ges = "tap",
+                    range = row.dimen,
+                },
+            },
+        }
+        row.onTap = function()
+            if callback then callback() end
+            return true
+        end
+    end
+    return row
+end
+
+function DashboardScreen:makePanelDivider(width)
+    width = width or self.panel_inner_w or self.width
+    local inset = Size.padding.large
+    return CenterContainer:new{
+        dimen = Geom:new{ w = width, h = Size.line.thin },
+        LineWidget:new{
+            dimen = Geom:new{ w = math.max(1, width - inset * 2), h = Size.line.thin },
+            background = Blitbuffer.COLOR_BLACK,
+        },
+    }
+end
+
+function DashboardScreen:makeGroupedPanel(rows)
+    local panel_h = self.row_h * #rows + Size.line.thin * math.max(0, #rows - 1)
+    local content = VerticalGroup:new{}
+    for i, row in ipairs(rows) do
+        table.insert(content, row)
+        if i < #rows then
+            table.insert(content, self:makePanelDivider(self.panel_inner_w))
+        end
+    end
+    return FrameContainer:new{
+        dimen = Geom:new{ x = 0, y = 0, w = self.width, h = panel_h },
+        padding = Size.padding.small,
+        bordersize = Size.border.thin,
+        radius = self.card_radius,
+        background = Blitbuffer.COLOR_WHITE,
+        content,
+    }
+end
+
+function DashboardScreen:makeLanguagePanelRow(row)
+    local inner_w = self.panel_inner_w
     local name_w = math.floor(inner_w * 0.31)
     local due_w = math.floor(inner_w * 0.14)
     local new_w = math.floor(inner_w * 0.14)
@@ -486,8 +502,8 @@ function DashboardScreen:makeLanguageRow(row)
     local chevron_w = inner_w - name_w - due_w - new_w - leading_spacer_w - bar_w - pct_gap_w - pct_w
     local percent, pct = self:languageProgress(row)
     local meta_size = self.meta_font_size
-    return self:makeRow(HorizontalGroup:new{
-        self:makeColumnText(shortText(row.language, 16), name_w, "smallinfofontbold", "left"),
+    return self:makePanelRow(HorizontalGroup:new{
+        self:makeColumnText(shortText(row.language, 16), name_w, "smallinfofont", "left"),
         self:makeColumnText(string.format(_("Due %d"), row.due), due_w, "smallinfofont", "left", meta_size),
         self:makeColumnText(string.format(_("New %d"), row.new), new_w, "smallinfofont", "left", meta_size),
         HorizontalSpan:new{ width = leading_spacer_w },
@@ -500,38 +516,58 @@ function DashboardScreen:makeLanguageRow(row)
         self:makeColumnText(CHEVRON, chevron_w, "smallinfofontbold", "right"),
     }, function()
         self:openStudy(row.language)
-    end)
+    end, inner_w)
 end
 
-function DashboardScreen:makeBookRow(row)
-    local padding = Size.padding.small
-    local inner_w = self.width - padding * 2
+function DashboardScreen:makeBookPanelRow(row)
+    local inner_w = self.panel_inner_w
     local title_w = math.floor(inner_w * 0.58)
     local due_w = math.floor(inner_w * 0.15)
     local total_w = math.floor(inner_w * 0.21)
     local chevron_w = inner_w - title_w - due_w - total_w
     local meta_size = self.meta_font_size
-    return self:makeRow(HorizontalGroup:new{
+    return self:makePanelRow(HorizontalGroup:new{
         self:makeColumnText(shortText(row.title, 24), title_w, "smallinfofont", "left"),
         self:makeColumnText(string.format(_("Due %d"), row.due), due_w, "smallinfofont", "left", meta_size),
         self:makeColumnText(string.format(_("Total %d"), row.total), total_w, "smallinfofont", "left", meta_size),
         self:makeColumnText(CHEVRON, chevron_w, "smallinfofontbold", "right"),
     }, function()
         self:openBook(row)
-    end)
+    end, inner_w)
 end
 
-function DashboardScreen:makeAttentionRow(icon, text, callback)
-    local padding = Size.padding.small
-    local inner_w = self.width - padding * 2
+function DashboardScreen:makeAttentionPanelRow(icon, text, callback, width)
+    local inner_w = width or self.width
     local icon_w = math.floor(inner_w * 0.08)
     local text_w = math.floor(inner_w * 0.82)
     local chevron_w = inner_w - icon_w - text_w
-    return self:makeRow(HorizontalGroup:new{
-        self:makeColumnText(icon, icon_w, "smallinfofont", "center"),
-        self:makeColumnText(text, text_w, "smallinfofont", "left"),
-        self:makeColumnText(CHEVRON, chevron_w, "smallinfofontbold", "right"),
-    }, callback)
+    local row = InputContainer:new{
+        dimen = Geom:new{ x = 0, y = 0, w = inner_w, h = self.row_h },
+        HorizontalGroup:new{
+            self:makeColumnText(icon, icon_w, "smallinfofont", "center"),
+            self:makeColumnText(text, text_w, "smallinfofont", "left"),
+            self:makeColumnText(CHEVRON, chevron_w, "smallinfofontbold", "right"),
+        },
+    }
+    if Device:isTouchDevice() then
+        row.ges_events = {
+            Tap = {
+                GestureRange:new{
+                    ges = "tap",
+                    range = row.dimen,
+                },
+            },
+        }
+        row.onTap = function()
+            if callback then callback() end
+            return true
+        end
+    end
+    return row
+end
+
+function DashboardScreen:makeAttentionPanel(rows)
+    return self:makeGroupedPanel(rows)
 end
 
 function DashboardScreen:makeButton(text, width, callback)
@@ -541,6 +577,7 @@ function DashboardScreen:makeButton(text, width, callback)
             dimen = Geom:new{ x = 0, y = 0, w = width, h = self.button_h },
             padding = Size.padding.small,
             bordersize = Size.border.thin,
+            radius = self.card_radius,
             background = Blitbuffer.COLOR_WHITE,
             CenterContainer:new{
                 dimen = Geom:new{ w = width - Size.padding.small * 2, h = self.button_h - Size.padding.small * 2 },
@@ -631,58 +668,89 @@ function DashboardScreen:buildStatsRow()
 end
 
 function DashboardScreen:buildLanguageRows()
+    self.panel_inner_w = self.width - (Size.padding.small + Size.border.thin) * 2
     local rows = {}
     if self.data.loading then
-        return { self:makePlainRow(_("Loading..."), nil) }
+        return { self:makeGroupedPanel({
+            self:makePanelRow(
+                self:makeTextBox(_("Loading..."), self.panel_inner_w, self.row_h - Size.padding.small * 2,
+                    "smallinfofont", "left"),
+                nil,
+                self.panel_inner_w
+            ),
+        }) }
     end
     if #self.data.languages == 0 then
-        return { self:makePlainRow(_("No cards yet"), nil) }
+        return { self:makeGroupedPanel({
+            self:makePanelRow(
+                self:makeTextBox(_("No cards yet"), self.panel_inner_w, self.row_h - Size.padding.small * 2,
+                    "smallinfofont", "left"),
+                nil,
+                self.panel_inner_w
+            ),
+        }) }
     end
     for i = 1, math.min(#self.data.languages, MAX_LANGUAGE_ROWS) do
         local row = self.data.languages[i]
-        rows[#rows + 1] = self:makeLanguageRow(row)
+        rows[#rows + 1] = self:makeLanguagePanelRow(row)
     end
-    return rows
+    return { self:makeGroupedPanel(rows) }
 end
 
 function DashboardScreen:buildBookRows()
+    self.panel_inner_w = self.width - (Size.padding.small + Size.border.thin) * 2
     local rows = {}
     if self.data.loading then
-        return { self:makePlainRow(_("Loading..."), nil) }
+        return { self:makeGroupedPanel({
+            self:makePanelRow(
+                self:makeTextBox(_("Loading..."), self.panel_inner_w, self.row_h - Size.padding.small * 2,
+                    "smallinfofont", "left"),
+                nil,
+                self.panel_inner_w
+            ),
+        }) }
     end
     if #self.data.books == 0 then
-        return { self:makePlainRow(_("No books with cards"), nil) }
+        return { self:makeGroupedPanel({
+            self:makePanelRow(
+                self:makeTextBox(_("No books with cards"), self.panel_inner_w, self.row_h - Size.padding.small * 2,
+                    "smallinfofont", "left"),
+                nil,
+                self.panel_inner_w
+            ),
+        }) }
     end
     for i = 1, math.min(#self.data.books, MAX_BOOK_ROWS) do
         local row = self.data.books[i]
-        rows[#rows + 1] = self:makeBookRow(row)
+        rows[#rows + 1] = self:makeBookPanelRow(row)
     end
-    return rows
+    return { self:makeGroupedPanel(rows) }
 end
 
 function DashboardScreen:buildAttentionRows()
+    self.panel_inner_w = self.width - (Size.padding.small + Size.border.thin) * 2
     if self.data.loading then
-        return {
-            self:makePlainRow(_("Loading..."), nil),
-            self:makePlainRow("", nil),
-            self:makePlainRow("", nil),
-        }
+        return self:makeAttentionPanel({
+            self:makeAttentionPanelRow("", _("Loading..."), nil, self.panel_inner_w),
+            self:makeAttentionPanelRow("", "", nil, self.panel_inner_w),
+            self:makeAttentionPanelRow("", "", nil, self.panel_inner_w),
+        })
     end
     local summary = self.data.summary or {}
     local weak = n(summary.weak_cards)
     local missing = n(summary.missing_ai)
     local leeches = n(summary.leeches)
-    return {
-        self:makeAttentionRow(ICON_WEAK, string.format(_("%d weak cards"), weak), function()
+    return self:makeAttentionPanel({
+        self:makeAttentionPanelRow(ICON_WEAK, string.format(_("%d weak cards"), weak), function()
             self:openWeakCards()
-        end),
-        self:makeAttentionRow(ICON_MISSING, string.format(_("%d missing AI data"), missing), function()
+        end, self.panel_inner_w),
+        self:makeAttentionPanelRow(ICON_MISSING, string.format(_("%d missing AI data"), missing), function()
             self:openMissingAI()
-        end),
-        self:makeAttentionRow(ICON_LEECH, string.format(_("%d leeches"), leeches), function()
+        end, self.panel_inner_w),
+        self:makeAttentionPanelRow(ICON_LEECH, string.format(_("%d leeches"), leeches), function()
             self:openLeeches()
-        end),
-    }
+        end, self.panel_inner_w),
+    })
 end
 
 function DashboardScreen:buildBottomButtons()
