@@ -1763,6 +1763,149 @@ function DB.getSummary(book_id, require_enriched_due)
     return result
 end
 
+function DB.getDashboardSummary(options)
+    options = options or {}
+    local max_book_rows = math.max(1, tonumber(options.max_book_rows) or 3)
+    local learn_ahead_seconds = tonumber(options.learn_ahead_seconds) or (20 * 60)
+    local daily_new_limit = tonumber(options.daily_new_limit) or 20
+    local daily_review_limit = tonumber(options.daily_review_limit) or 200
+    local deck_new_limits = options.deck_new_limits or {}
+    local deck_review_limits = options.deck_review_limits or {}
+    local require_enriched = options.require_enriched
+    if require_enriched == nil then require_enriched = true end
+
+    local function summaryNumber(value)
+        return tonumber(value) or 0
+    end
+
+    local function addSummaryTotals(total, summary)
+        for _, key in ipairs{
+            "total", "pending", "failed", "new", "reviewed", "learning",
+            "flagged", "known", "lapsed_cards",
+        } do
+            total[key] = summaryNumber(total[key]) + summaryNumber(summary and summary[key])
+        end
+    end
+
+    local function getQueueCounts(book_id, language)
+        local deck_new = tonumber(deck_new_limits[language])
+        local deck_review = tonumber(deck_review_limits[language])
+        return DB.getStudyQueueCounts(
+            book_id, language, require_enriched, nil,
+            deck_review or daily_review_limit, learn_ahead_seconds,
+            deck_new or daily_new_limit, true
+        ) or { new = 0, learning = 0, review = 0 }
+    end
+
+    local function dueFromCounts(counts)
+        return summaryNumber(counts and counts.new)
+            + summaryNumber(counts and counts.learning)
+            + summaryNumber(counts and counts.review)
+    end
+
+    local function countCardsByState(state, include_known)
+        return summaryNumber(DB.countCards(
+            nil, false, false, "", os.time(), nil, nil,
+            include_known and true or false, false, false, state
+        ))
+    end
+
+    local previous_language = DB.getActiveLanguage()
+    local ok, result = pcall(function()
+        local languages = options.languages or DB.listLanguages()
+        local data = {
+            summary = {},
+            languages = {},
+            books = {},
+            first_due_language = nil,
+            first_language = previous_language or languages[1],
+            missing_ai_language = nil,
+            weak_language = nil,
+            leech_language = nil,
+            suspended_language = nil,
+        }
+
+        for _, language in ipairs(languages) do
+            DB.setLanguage(language)
+            local summary = DB.getSummary(nil, require_enriched) or {}
+            local counts = getQueueCounts(nil, language)
+            local due = dueFromCounts(counts)
+            local weak_count = countCardsByState("weak", false)
+            local leech_count = countCardsByState("leech", false)
+            local suspended_count = countCardsByState("suspended", true)
+            addSummaryTotals(data.summary, summary)
+            data.summary.due = summaryNumber(data.summary.due) + due
+            data.summary.available_new = summaryNumber(data.summary.available_new) + summaryNumber(counts.new)
+            data.summary.weak_cards = summaryNumber(data.summary.weak_cards) + weak_count
+            data.summary.missing_ai = summaryNumber(data.summary.missing_ai)
+                + summaryNumber(summary.pending) + summaryNumber(summary.failed)
+            data.summary.leeches = summaryNumber(data.summary.leeches) + leech_count
+            data.summary.suspended = summaryNumber(data.summary.suspended) + suspended_count
+
+            data.languages[#data.languages + 1] = {
+                language = language,
+                total = summaryNumber(summary.total),
+                due = due,
+                new = summaryNumber(counts.new),
+                mature = summaryNumber(summary.mature),
+            }
+            if (summaryNumber(summary.pending) + summaryNumber(summary.failed)) > 0 and not data.missing_ai_language then
+                data.missing_ai_language = language
+            end
+            if weak_count > 0 and not data.weak_language then
+                data.weak_language = language
+            end
+            if leech_count > 0 and not data.leech_language then
+                data.leech_language = language
+            end
+            if suspended_count > 0 and not data.suspended_language then
+                data.suspended_language = language
+            end
+
+            for _, book in ipairs(DB.listBooks() or {}) do
+                data.books[#data.books + 1] = {
+                    id = book.id,
+                    language = language,
+                    title = book.title ~= "" and book.title or book.filepath,
+                    total = summaryNumber(book.card_count),
+                    due = 0,
+                }
+            end
+        end
+
+        table.sort(data.languages, function(a, b)
+            if a.due ~= b.due then return a.due > b.due end
+            return tostring(a.language):lower() < tostring(b.language):lower()
+        end)
+        for _, row in ipairs(data.languages) do
+            if summaryNumber(row.due) > 0 then
+                data.first_due_language = row.language
+                break
+            end
+        end
+        table.sort(data.books, function(a, b)
+            if a.total ~= b.total then return a.total > b.total end
+            return tostring(a.title):lower() < tostring(b.title):lower()
+        end)
+        for i = 1, math.min(#data.books, max_book_rows) do
+            local book = data.books[i]
+            DB.setLanguage(book.language)
+            book.due = dueFromCounts(getQueueCounts(book.id, book.language))
+        end
+        table.sort(data.books, function(a, b)
+            if a.due ~= b.due then return a.due > b.due end
+            if a.total ~= b.total then return a.total > b.total end
+            return tostring(a.title):lower() < tostring(b.title):lower()
+        end)
+
+        return data
+    end)
+
+    DB.setLanguage(previous_language)
+    if not ok then error(result) end
+    return result
+end
+
 -- Return daily review summaries for the last `days` days from review_history.
 -- Each row: { day = "YYYY-MM-DD", total, again, hard, good, easy, cards }
 function DB.getStudyHistory(days)

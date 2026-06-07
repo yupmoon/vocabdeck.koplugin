@@ -64,37 +64,11 @@ local function shortText(text, max_len)
     return text:sub(1, max_len - 1) .. "..."
 end
 
-local function addTotals(total, summary)
-    for _, key in ipairs{
-        "total", "pending", "failed", "new", "reviewed", "learning",
-        "flagged", "known", "lapsed_cards",
-    } do
-        total[key] = n(total[key]) + n(summary and summary[key])
-    end
-end
-
 local function getRequireEnriched(plugin)
     if not plugin then return true end
     local value = plugin:readSetting("require_enriched_for_study")
     if value == nil then return true end
     return value and true or false
-end
-
-local function getQueueCounts(plugin, book_id, language, require_enriched)
-    local daily_new_limit = plugin and (tonumber(plugin:readSetting("daily_new_cards_limit", 20)) or 20) or 20
-    local daily_review_limit = plugin and (tonumber(plugin:readSetting("daily_review_cards_limit", 200)) or 200) or 200
-    local deck_new = plugin and language and tonumber(plugin:readSetting("deck_new_limit_" .. language)) or nil
-    local deck_review = plugin and language and tonumber(plugin:readSetting("deck_review_limit_" .. language)) or nil
-    local ok, counts = pcall(DB.getStudyQueueCounts,
-        book_id, language, require_enriched, nil,
-        deck_review or daily_review_limit, LEARN_AHEAD_SECONDS,
-        deck_new or daily_new_limit, true)
-    if ok and counts then return counts end
-    return { new = 0, learning = 0, review = 0 }
-end
-
-local function dueFromCounts(counts)
-    return n(counts and counts.new) + n(counts and counts.learning) + n(counts and counts.review)
 end
 
 local function emptyData(plugin, loading)
@@ -113,108 +87,27 @@ local function emptyData(plugin, loading)
     }
 end
 
-local function countCardsByState(state, include_known)
-    local ok, count = pcall(DB.countCards,
-        nil, false, false, "", os.time(), nil, nil,
-        include_known and true or false, false, false, state)
-    return ok and n(count) or 0
-end
-
 local function collectData(plugin)
-    local previous_language = DB.getActiveLanguage()
-    local require_enriched = getRequireEnriched(plugin)
     local languages = DB.listLanguages()
-    local data = {
-        summary = {},
-        languages = {},
-        books = {},
-        first_due_language = nil,
-        first_language = previous_language or languages[1],
-        missing_ai_language = nil,
-        weak_language = nil,
-        leech_language = nil,
-        suspended_language = nil,
+    local deck_new_limits = {}
+    local deck_review_limits = {}
+    if plugin then
+        for _, language in ipairs(languages) do
+            deck_new_limits[language] = tonumber(plugin:readSetting("deck_new_limit_" .. language))
+            deck_review_limits[language] = tonumber(plugin:readSetting("deck_review_limit_" .. language))
+        end
+    end
+    local require_enriched = getRequireEnriched(plugin)
+    return DB.getDashboardSummary{
+        languages = languages,
+        require_enriched = require_enriched,
+        daily_new_limit = plugin and plugin:readSetting("daily_new_cards_limit", 20) or 20,
+        daily_review_limit = plugin and plugin:readSetting("daily_review_cards_limit", 200) or 200,
+        deck_new_limits = deck_new_limits,
+        deck_review_limits = deck_review_limits,
+        learn_ahead_seconds = LEARN_AHEAD_SECONDS,
+        max_book_rows = MAX_BOOK_ROWS,
     }
-
-    for _, language in ipairs(languages) do
-        DB.setLanguage(language)
-        local ok_summary, summary = pcall(DB.getSummary, nil, require_enriched)
-        summary = ok_summary and summary or {}
-        local counts = getQueueCounts(plugin, nil, language, require_enriched)
-        local due = dueFromCounts(counts)
-        local weak_count = countCardsByState("weak", false)
-        local leech_count = countCardsByState("leech", false)
-        local suspended_count = countCardsByState("suspended", true)
-        addTotals(data.summary, summary)
-        data.summary.due = n(data.summary.due) + due
-        data.summary.available_new = n(data.summary.available_new) + n(counts.new)
-        data.summary.weak_cards = n(data.summary.weak_cards) + weak_count
-        data.summary.missing_ai = n(data.summary.missing_ai) + n(summary.pending) + n(summary.failed)
-        data.summary.leeches = n(data.summary.leeches) + leech_count
-        data.summary.suspended = n(data.summary.suspended) + suspended_count
-
-        local language_row = {
-            language = language,
-            total = n(summary.total),
-            due = due,
-            new = n(counts.new),
-            mature = n(summary.mature),
-        }
-        data.languages[#data.languages + 1] = language_row
-        if (n(summary.pending) + n(summary.failed)) > 0 and not data.missing_ai_language then
-            data.missing_ai_language = language
-        end
-        if weak_count > 0 and not data.weak_language then
-            data.weak_language = language
-        end
-        if leech_count > 0 and not data.leech_language then
-            data.leech_language = language
-        end
-        if suspended_count > 0 and not data.suspended_language then
-            data.suspended_language = language
-        end
-
-        local ok_books, books = pcall(DB.listBooks)
-        books = ok_books and books or {}
-        for _, book in ipairs(books) do
-            data.books[#data.books + 1] = {
-                id = book.id,
-                language = language,
-                title = book.title ~= "" and book.title or book.filepath,
-                total = n(book.card_count),
-                due = 0,
-            }
-        end
-    end
-
-    table.sort(data.languages, function(a, b)
-        if a.due ~= b.due then return a.due > b.due end
-        return tostring(a.language):lower() < tostring(b.language):lower()
-    end)
-    for _, row in ipairs(data.languages) do
-        if n(row.due) > 0 then
-            data.first_due_language = row.language
-            break
-        end
-    end
-    table.sort(data.books, function(a, b)
-        if a.total ~= b.total then return a.total > b.total end
-        return tostring(a.title):lower() < tostring(b.title):lower()
-    end)
-    for i = 1, math.min(#data.books, MAX_BOOK_ROWS) do
-        local book = data.books[i]
-        DB.setLanguage(book.language)
-        local book_counts = getQueueCounts(plugin, book.id, book.language, require_enriched)
-        book.due = dueFromCounts(book_counts)
-    end
-    table.sort(data.books, function(a, b)
-        if a.due ~= b.due then return a.due > b.due end
-        if a.total ~= b.total then return a.total > b.total end
-        return tostring(a.title):lower() < tostring(b.title):lower()
-    end)
-
-    DB.setLanguage(previous_language)
-    return data
 end
 
 local function getCacheVersion()
