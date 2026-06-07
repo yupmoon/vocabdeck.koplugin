@@ -595,16 +595,26 @@ end
 
 function DashboardScreen:buildStatsRow()
     local summary = self.data.summary or {}
+    local due = n(summary.due)
+    local new = n(summary.available_new)
     local weak = n(summary.weak_cards)
     local suspended = n(summary.suspended)
     local gap = self.tile_gap
     local cell_w = math.floor((self.width - gap * 3) / 4)
     return HorizontalGroup:new{
-        self:makeStatCell(_("Due"), n(summary.due), cell_w, function()
+        self:makeStatCell(_("Due"), due, cell_w, function()
+            if due <= 0 then
+                UIManager:show(InfoMessage:new{ text = _("No cards due."), timeout = 2 })
+                return
+            end
             self:openStudy(self.data.first_due_language or self.data.first_language)
         end),
         HorizontalSpan:new{ width = gap },
-        self:makeStatCell(_("New"), n(summary.available_new), cell_w, function()
+        self:makeStatCell(_("New"), new, cell_w, function()
+            if new <= 0 then
+                UIManager:show(InfoMessage:new{ text = _("No new cards."), timeout = 2 })
+                return
+            end
             self:openAllCards(self.data.first_due_language or self.data.first_language, {
                 filter_not_started = true,
             })
@@ -714,6 +724,10 @@ function DashboardScreen:openBook(row)
 end
 
 function DashboardScreen:openMissingAI()
+    if n(self.data.summary and self.data.summary.missing_ai) <= 0 then
+        UIManager:show(InfoMessage:new{ text = _("No missing AI data."), timeout = 2 })
+        return
+    end
     local language = self.data.missing_ai_language or self.data.first_language
     if not language or language == "" then
         UIManager:show(InfoMessage:new{ text = _("No missing AI data."), timeout = 2 })
@@ -723,15 +737,23 @@ function DashboardScreen:openMissingAI()
 end
 
 function DashboardScreen:openWeakCards()
+    if n(self.data.summary and self.data.summary.weak_cards) <= 0 then
+        UIManager:show(InfoMessage:new{ text = _("No weak cards."), timeout = 2 })
+        return
+    end
     local language = self.data.weak_language or self.data.first_language
     if not language or language == "" then
-        UIManager:show(InfoMessage:new{ text = _("No weak or flagged cards."), timeout = 2 })
+        UIManager:show(InfoMessage:new{ text = _("No weak cards."), timeout = 2 })
         return
     end
     self:openAllCards(language, { filter_weak = true })
 end
 
 function DashboardScreen:openLeeches()
+    if n(self.data.summary and self.data.summary.leeches) <= 0 then
+        UIManager:show(InfoMessage:new{ text = _("No leeches."), timeout = 2 })
+        return
+    end
     local language = self.data.leech_language or self.data.first_language
     if not language or language == "" then
         UIManager:show(InfoMessage:new{ text = _("No leeches."), timeout = 2 })
@@ -741,6 +763,10 @@ function DashboardScreen:openLeeches()
 end
 
 function DashboardScreen:openSuspendedCards()
+    if n(self.data.summary and self.data.summary.suspended) <= 0 then
+        UIManager:show(InfoMessage:new{ text = _("No suspended cards."), timeout = 2 })
+        return
+    end
     local language = self.data.suspended_language or self.data.first_language
     if not language or language == "" then
         UIManager:show(InfoMessage:new{ text = _("No suspended cards."), timeout = 2 })
