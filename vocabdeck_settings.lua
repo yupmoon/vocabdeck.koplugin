@@ -255,7 +255,10 @@ local function getLeechAction(plugin)
     return value
 end
 
-local function makeLeechActionItems(plugin)
+local goBackFromSubmenu
+local appendBackItem
+
+local function makeLeechActionItems(plugin, parent_menu_instance)
     local actions = {
         { key = "tag", label = LEECH_ACTION_LABELS.tag },
         { key = "suspend", label = LEECH_ACTION_LABELS.suspend },
@@ -273,7 +276,7 @@ local function makeLeechActionItems(plugin)
             end,
         }
     end
-    return items
+    return appendBackItem(items, parent_menu_instance)
 end
 
 local function makeRefreshable(items, plugin)
@@ -284,7 +287,7 @@ local function makeRefreshable(items, plugin)
     return items
 end
 
-local function makeProviderItems(plugin)
+local function makeProviderItems(plugin, parent_menu_instance)
     local items = {}
     local providers = listProviders(plugin)
     if #providers == 0 then
@@ -320,7 +323,7 @@ local function makeProviderItems(plugin)
     return items
 end
 
-local function makeModelItems(plugin, provider)
+local function makeModelItems(plugin, provider, parent_menu_instance)
     local items = {}
     if not provider then
         items[#items + 1] = { text = _("No provider selected."), enabled = false }
@@ -351,7 +354,26 @@ local function makeModelItems(plugin, provider)
     return items
 end
 
-local function makeFieldItems(plugin, side)
+function goBackFromSubmenu(menu_instance)
+    if menu_instance and menu_instance.backToUpperMenu then
+        menu_instance:backToUpperMenu()
+    elseif menu_instance and menu_instance.onClose then
+        menu_instance:onClose()
+    end
+end
+
+function appendBackItem(items, parent_menu_instance)
+    items[#items + 1] = {
+        text = _("Back"),
+        keep_menu_open = true,
+        callback = function(touchmenu_instance)
+            goBackFromSubmenu(touchmenu_instance or parent_menu_instance)
+        end,
+    }
+    return items
+end
+
+local function makeFieldItems(plugin, side, parent_menu_instance)
     local items = {}
     for _idx, f in ipairs(CardFields.FIELD_LABELS) do
         local key = f.key
@@ -369,7 +391,7 @@ local function makeFieldItems(plugin, side)
             end,
         }
     end
-    return items
+    return appendBackItem(items, parent_menu_instance)
 end
 
 local function makeProviderMenuItem(plugin)
@@ -445,8 +467,8 @@ local function makeAiContextWordsMenuItem(plugin)
     }
 end
 
-local function makeBackupItems()
-    return {
+local function makeBackupItems(parent_menu_instance)
+    local items = {
         {
             text = _("Backup cards now"),
             keep_menu_open = true,
@@ -480,10 +502,11 @@ local function makeBackupItems()
             end,
         },
     }
+    return appendBackItem(items, parent_menu_instance)
 end
 
 local function makeAutoRateItems(plugin, refreshMenu, touchmenu_instance)
-    return {
+    local items = {
         {
             text = _("Enable auto-rate"),
             text_func = function()
@@ -589,10 +612,11 @@ local function makeAutoRateItems(plugin, refreshMenu, touchmenu_instance)
             end,
         },
     }
+    return appendBackItem(items, touchmenu_instance)
 end
 
 local function makeManualAdvanceItems(plugin, refreshMenu, touchmenu_instance)
-    return {
+    local items = {
         {
             text = _("Again advance delay"),
             text_func = function()
@@ -682,6 +706,7 @@ local function makeManualAdvanceItems(plugin, refreshMenu, touchmenu_instance)
             end,
         },
     }
+    return appendBackItem(items, touchmenu_instance)
 end
 
 function Settings.buildAiMenuItems(plugin)
@@ -798,7 +823,9 @@ function Settings.buildMenuItems(plugin, default_touchmenu_instance)
         },
         {
             text = _("Backup and recover"),
-            sub_item_table_func = makeBackupItems,
+            sub_item_table_func = function(touchmenu_instance)
+                return makeBackupItems(touchmenu_instance)
+            end,
         },
         {
             text = _("Show answer timer in study"),
@@ -858,15 +885,15 @@ function Settings.buildMenuItems(plugin, default_touchmenu_instance)
         {
             text = _("Front side fields"),
             mandatory = shortMandatory(CardFields.describeFields(CardFields.getFieldState(plugin, "front"))),
-            sub_item_table_func = function()
-                return makeFieldItems(plugin, "front")
+            sub_item_table_func = function(touchmenu_instance)
+                return makeFieldItems(plugin, "front", touchmenu_instance)
             end,
         },
         {
             text = _("Back side fields"),
             mandatory = shortMandatory(CardFields.describeFields(CardFields.getFieldState(plugin, "back"))),
-            sub_item_table_func = function()
-                return makeFieldItems(plugin, "back")
+            sub_item_table_func = function(touchmenu_instance)
+                return makeFieldItems(plugin, "back", touchmenu_instance)
             end,
         },
         {
@@ -936,8 +963,8 @@ function Settings.buildMenuItems(plugin, default_touchmenu_instance)
             text_func = function()
                 return string.format("%s: %s", _("Leech action"), LEECH_ACTION_LABELS[getLeechAction(plugin)] or LEECH_ACTION_LABELS.tag)
             end,
-            sub_item_table_func = function()
-                return makeLeechActionItems(plugin)
+            sub_item_table_func = function(touchmenu_instance)
+                return makeLeechActionItems(plugin, touchmenu_instance)
             end,
         },
         {

@@ -950,6 +950,11 @@ function DashboardScreen:openSettings()
                 settings_menu:updateItems()
             end
         end,
+        onClose = function()
+            if settings_menu and settings_menu.onClose then
+                settings_menu:onClose()
+            end
+        end,
     }
     local function materializeSubmenus(items)
         if not items then return items end
