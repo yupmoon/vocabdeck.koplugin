@@ -32,12 +32,15 @@ local StudyEntry = require("vocabdeck_study_entry")
 
 local Dashboard = {}
 
+local DASHBOARD_CACHE_TTL = 60  -- seconds
+local _dashboard_cache = nil    -- { data, expires_at }
+
 local DashboardScreen = InputContainer:extend{
     plugin = nil,
 }
 
 local LEARN_AHEAD_SECONDS = 20 * 60
-local MAX_LANGUAGE_ROWS = 3
+local MAX_LANGUAGE_ROWS = 2
 local MAX_BOOK_ROWS = 3
 local ICON_WEAK = "\226\154\160"      -- warning sign
 local ICON_MISSING = "\226\150\163"   -- document-like outline
@@ -188,6 +191,15 @@ local function collectData(plugin)
     return data
 end
 
+local function getCachedData(plugin)
+    if _dashboard_cache and _dashboard_cache.expires_at > os.time() then
+        return _dashboard_cache.data
+    end
+    local data = collectData(plugin)
+    _dashboard_cache = { data = data, expires_at = os.time() + DASHBOARD_CACHE_TTL }
+    return data
+end
+
 function DashboardScreen:init()
     local Screen = Device.screen
     self.dimen = Geom:new{ x = 0, y = 0, w = Screen:getWidth(), h = Screen:getHeight() }
@@ -202,7 +214,7 @@ function DashboardScreen:init()
         }
     end
 
-    self.data = collectData(self.plugin)
+    self.data = getCachedData(self.plugin)
     self.page_padding = Screen:scaleBySize(30)
     self.tile_gap = Screen:scaleBySize(10)
     self.section_gap = Screen:scaleBySize(12)
@@ -232,8 +244,21 @@ function DashboardScreen:rebuildContent()
     table.insert(content, self:buildTopBar())
     table.insert(content, VerticalSpan:new{ width = self.tile_gap })
     table.insert(content, self:buildStatsRow())
-    self:addSection(content, _("Languages"), self:buildLanguageRows())
-    self:addSection(content, _("Books"), self:buildBookRows())
+    -- Tappable section headers — tap to view all languages/books.
+    table.insert(content, VerticalSpan:new{ width = self.section_gap })
+    table.insert(content, self:makeTappableHeader(_("Languages"), function()
+        self:openAllCards(self.data.first_language)
+    end))
+    for _, row in ipairs(self:buildLanguageRows()) do
+        table.insert(content, row)
+    end
+    table.insert(content, VerticalSpan:new{ width = self.section_gap })
+    table.insert(content, self:makeTappableHeader(_("Books"), function()
+        self:openAllBooks()
+    end))
+    for _, row in ipairs(self:buildBookRows()) do
+        table.insert(content, row)
+    end
     self:addSection(content, _("Attention"), self:buildAttentionRows())
     table.insert(content, VerticalSpan:new{ width = self.section_gap })
     table.insert(content, self:buildBottomButtons())
@@ -248,7 +273,7 @@ function DashboardScreen:rebuildContent()
 end
 
 function DashboardScreen:onShow()
-    self.data = collectData(self.plugin)
+    self.data = getCachedData(self.plugin)
     self:rebuildContent()
     UIManager:setDirty(self, "partial")
 end
@@ -570,6 +595,23 @@ function DashboardScreen:makeButton(text, width, callback)
     return button
 end
 
+function DashboardScreen:makeTappableHeader(text, callback)
+    local header = InputContainer:new{
+        dimen = Geom:new{ x = 0, y = 0, w = self.width, h = self.section_h },
+        self:makeTextBox(text, self.width, self.section_h, "smallinfofontbold", "left"),
+    }
+    if callback and Device:isTouchDevice() then
+        header.ges_events = {
+            Tap = { GestureRange:new{ ges = "tap", range = header.dimen } },
+        }
+        header.onTap = function()
+            callback()
+            return true
+        end
+    end
+    return header
+end
+
 function DashboardScreen:addSection(content, title, rows)
     table.insert(content, VerticalSpan:new{ width = self.section_gap })
     table.insert(content, self:makeTextBox(title, self.width, self.section_h, "smallinfofontbold", "left"))
@@ -723,10 +765,40 @@ end
 
 function DashboardScreen:openImport()
     if not self.plugin or not self.plugin.getDocumentFilePath or not self.plugin:getDocumentFilePath() then
-        UIManager:show(InfoMessage:new{ text = _("Open a book first to import Vocabulary Builder words."), timeout = 3 })
+        UIManager:show(InfoMessage:new{
+            text = _("Open a book to import its Vocabulary Builder words."),
+            timeout = 3,
+        })
         return
     end
     Importer.showImportDialog(self.plugin)
+end
+
+function DashboardScreen:openAllBooks()
+    local books = self.data.books
+    if not books or #books == 0 then
+        UIManager:show(InfoMessage:new{ text = _("No books with cards."), timeout = 2 })
+        return
+    end
+    local items = {}
+    for _, b in ipairs(books) do
+        local label = b.title or ""
+        if label == "" then label = _("Unknown") end
+        items[#items + 1] = {
+            text = string.format("%s  (%d)", label, b.total),
+            callback = function()
+                self:openBook(b)
+            end,
+        }
+    end
+    local screen = Device.screen
+    UIManager:show(Menu:new{
+        title = _("Books"),
+        item_table = items,
+        covers_fullscreen = true,
+        width = math.floor(screen:getWidth() * 0.9),
+        height = math.floor(screen:getHeight() * 0.9),
+    })
 end
 
 function DashboardScreen:openSettings()
