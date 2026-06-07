@@ -10,20 +10,19 @@ local DB = require("vocabdeck_db")
 
 local StudyEntry = {}
 
-function StudyEntry.install(VocabDeck)
-    -- Shared helper: set active language DB and start study.
-    local function startStudy(plugin, language)
-        plugin:saveSetting("last_study_source_language", language)
-        DB.setLanguage(language)
-        local StudyScreen = require("vocabdeck_study")
-        local study = StudyScreen:new{
-            plugin = plugin,
-            source_language = language,
-            book_title = language,
-        }
-        UIManager:show(study)
-    end
+function StudyEntry.startStudy(plugin, language)
+    plugin:saveSetting("last_study_source_language", language)
+    DB.setLanguage(language)
+    local StudyScreen = require("vocabdeck_study")
+    local study = StudyScreen:new{
+        plugin = plugin,
+        source_language = language,
+        book_title = language,
+    }
+    UIManager:show(study)
+end
 
+function StudyEntry.install(VocabDeck)
     -- Long-press: show deck settings for a language.
     local function showDeckSettings(plugin, language)
         local deck_retention_key = "deck_retention_" .. language
@@ -249,7 +248,7 @@ function StudyEntry.install(VocabDeck)
             }
             if due_count > 0 then
                 item.callback = function()
-                    startStudy(plugin, language)
+                    StudyEntry.startStudy(plugin, language)
                 end
             else
                 item.enabled = false

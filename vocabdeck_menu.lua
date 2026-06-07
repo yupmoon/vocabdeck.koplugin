@@ -9,6 +9,7 @@ local DB = require("vocabdeck_db")
 local SettingsModule = require("vocabdeck_settings")
 local Importer = require("vocabdeck_import")
 local EditModule = require("vocabdeck_edit")
+local Dashboard = require("vocabdeck_dashboard")
 local Diagnostics = require("vocabdeck_diagnostics")
 local StudyMore = require("vocabdeck_study_more")
 local StudyEntry = require("vocabdeck_study_entry")
@@ -55,6 +56,13 @@ function Menu.build(plugin, config_error, plugin_version)
     -- Build flat language items directly in the top-level menu.
     local study_items = StudyEntry.buildStudyMenuItems(plugin)
     local items = {}
+    items[#items + 1] = {
+        text = _("Dashboard"),
+        callback = function()
+            Dashboard.show(plugin)
+        end,
+        separator = true,
+    }
     for _, item in ipairs(study_items) do
         items[#items + 1] = item
     end

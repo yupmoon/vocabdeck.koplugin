@@ -101,6 +101,9 @@ local function hasAnyFilter(self)
         or self.filter_not_started
         or self.filter_learning
         or self.filter_learned
+        or self.filter_weak
+        or self.filter_leech
+        or self.filter_suspended
         or self.filter_book_id ~= nil
 end
 
@@ -113,6 +116,9 @@ local function clearFilters(self)
     self.filter_not_started = false
     self.filter_learning = false
     self.filter_learned = false
+    self.filter_weak = false
+    self.filter_leech = false
+    self.filter_suspended = false
     self.filter_book_id = nil
     self.sort_by = Filters.DEFAULT_SORT_BY
     self.sort_dir = Filters.DEFAULT_SORT_DIR
@@ -501,6 +507,7 @@ function Filters.onShowMenu(self)
 
     local all_active = not self.filter_flagged and not self.filter_not_started
         and not self.filter_learning and not self.filter_learned
+        and not self.filter_weak and not self.filter_leech and not self.filter_suspended
     item_table[#item_table + 1] = {
         text = all_active and _("✓ All words") or _("All words"),
         keep_menu_open = true,
@@ -509,6 +516,9 @@ function Filters.onShowMenu(self)
             self.filter_not_started = false
             self.filter_learning = false
             self.filter_learned = false
+            self.filter_weak = false
+            self.filter_leech = false
+            self.filter_suspended = false
             self.show_page = 1
             self:reloadItems()
         end,
@@ -522,6 +532,9 @@ function Filters.onShowMenu(self)
                 self.filter_not_started = false
                 self.filter_learning = false
                 self.filter_learned = false
+                self.filter_weak = false
+                self.filter_leech = false
+                self.filter_suspended = false
             end
             self.show_page = 1
             self:reloadItems()
@@ -536,6 +549,9 @@ function Filters.onShowMenu(self)
                 self.filter_flagged = false
                 self.filter_learning = false
                 self.filter_learned = false
+                self.filter_weak = false
+                self.filter_leech = false
+                self.filter_suspended = false
             end
             self.show_page = 1
             self:reloadItems()
@@ -550,6 +566,9 @@ function Filters.onShowMenu(self)
                 self.filter_flagged = false
                 self.filter_not_started = false
                 self.filter_learned = false
+                self.filter_weak = false
+                self.filter_leech = false
+                self.filter_suspended = false
             end
             self.show_page = 1
             self:reloadItems()
@@ -564,6 +583,9 @@ function Filters.onShowMenu(self)
                 self.filter_flagged = false
                 self.filter_not_started = false
                 self.filter_learning = false
+                self.filter_weak = false
+                self.filter_leech = false
+                self.filter_suspended = false
             end
             self.show_page = 1
             self:reloadItems()

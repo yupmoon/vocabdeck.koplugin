@@ -1281,6 +1281,12 @@ local function buildCardWhere(book_id, include_enriched_only, reviewable_only, f
         clauses[#clauses + 1] = "fsrs_state = 1"
     elseif filter_card_state == "learned" then
         clauses[#clauses + 1] = "known <> 0"
+    elseif filter_card_state == "weak" then
+        clauses[#clauses + 1] = "(lapse_count > 0 OR flag <> 0)"
+    elseif filter_card_state == "leech" then
+        clauses[#clauses + 1] = "leech <> 0"
+    elseif filter_card_state == "suspended" then
+        clauses[#clauses + 1] = "suspended <> 0"
     end
     if #clauses == 0 then
         return ""

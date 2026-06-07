@@ -50,6 +50,9 @@ local VocabDeckCardList = FocusManager:extend{
     filter_not_started = false,
     filter_learning = false,
     filter_learned = false,
+    filter_weak = false,
+    filter_leech = false,
+    filter_suspended = false,
     reviewable_only = false,
     show_known = false,
     quick_delete = false,
@@ -73,6 +76,9 @@ local function hasActiveFilters(self)
         or self.filter_not_started
         or self.filter_learning
         or self.filter_learned
+        or self.filter_weak
+        or self.filter_leech
+        or self.filter_suspended
         or self.filter_book_id ~= nil
 end
 
@@ -114,6 +120,12 @@ function VocabDeckCardList:getTitle()
         title = string.format("%s  [%s]", title, _("learning"))
     elseif self.filter_learned then
         title = string.format("%s  [%s]", title, _("learned"))
+    elseif self.filter_weak then
+        title = string.format("%s  [%s]", title, _("weak"))
+    elseif self.filter_leech then
+        title = string.format("%s  [%s]", title, _("leeches"))
+    elseif self.filter_suspended then
+        title = string.format("%s  [%s]", title, _("suspended"))
     end
     if not Filters.isDefaultSort(self.sort_by, self.sort_dir) then
         local sort_label, dir_label = Filters.getTitleSortLabel(self.sort_by, self.sort_dir)
@@ -130,12 +142,18 @@ function VocabDeckCardList:getCardStateFilter()
         return "learning"
     elseif self.filter_learned then
         return "learned"
+    elseif self.filter_weak then
+        return "weak"
+    elseif self.filter_leech then
+        return "leech"
+    elseif self.filter_suspended then
+        return "suspended"
     end
     return nil
 end
 
 function VocabDeckCardList:shouldIncludeKnown()
-    return self.show_known or self.filter_learned
+    return self.show_known or self.filter_learned or self.filter_suspended
 end
 
 -- Re-count total items and recalculate pagination.
@@ -648,17 +666,32 @@ end
 -- @param plugin   VocabDeck plugin instance
 -- @param book_id  nil = all books
 -- @param title    string shown in the title bar
-function Edit.showList(plugin, book_id, title)
+-- @param options  optional initial filters for callers such as the dashboard
+function Edit.showList(plugin, book_id, title, options)
+    options = options or {}
     local sort_by = Filters.DEFAULT_SORT_BY
     local sort_dir = Filters.DEFAULT_SORT_DIR
     if book_id and plugin and plugin.readSetting then
         sort_by = plugin:readSetting("card_list_sort", Filters.DEFAULT_SORT_BY)
         sort_dir = plugin:readSetting("card_list_sort_dir", Filters.DEFAULT_SORT_DIR)
     end
+    if options.active_language and options.active_language ~= "" then
+        DB.setLanguage(options.active_language)
+    end
     UIManager:show(VocabDeckCardList:new{
         title = title or _("VocabDeck cards"),
         plugin = plugin,
         book_id = book_id,
+        active_language = options.active_language,
+        filter_ai_status = options.filter_ai_status or false,
+        filter_flagged = options.filter_flagged or false,
+        filter_not_started = options.filter_not_started or false,
+        filter_learning = options.filter_learning or false,
+        filter_learned = options.filter_learned or false,
+        filter_weak = options.filter_weak or false,
+        filter_leech = options.filter_leech or false,
+        filter_suspended = options.filter_suspended or false,
+        show_known = options.show_known or false,
         sort_by = Filters.normalizeSortBy(sort_by),
         sort_dir = Filters.normalizeSortDir(sort_dir),
     })
