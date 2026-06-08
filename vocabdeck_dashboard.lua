@@ -15,6 +15,7 @@ local HorizontalGroup = require("ui/widget/horizontalgroup")
 local HorizontalSpan = require("ui/widget/horizontalspan")
 local IconWidget = require("ui/widget/iconwidget")
 local InfoMessage = require("ui/widget/infomessage")
+local InputDialog = require("ui/widget/inputdialog")
 local InputContainer = require("ui/widget/container/inputcontainer")
 local LineWidget = require("ui/widget/linewidget")
 local Menu = require("ui/widget/menu")
@@ -30,6 +31,7 @@ local Edit = require("vocabdeck_edit")
 local Importer = require("vocabdeck_import")
 local SettingsModule = require("vocabdeck_settings")
 local StudyEntry = require("vocabdeck_study_entry")
+local TextUtils = require("vocabdeck_text_utils")
 
 local Dashboard = {}
 
@@ -888,11 +890,11 @@ function DashboardScreen:buildBottomButtons()
     local gap = self.tile_gap
     local button_w = math.floor((self.width - gap * 4) / 5)
     return HorizontalGroup:new{
-        self:makeBottomButton(DASHBOARD_ICON_DIR .. "study.svg", _("Study"), button_w, function() self:openStudy(self.data.first_due_language or self.data.first_language) end),
-        HorizontalSpan:new{ width = gap },
         self:makeBottomButton(DASHBOARD_ICON_DIR .. "cards.svg", _("All cards"), button_w, function() self:openAllCards(self.data.first_language) end),
         HorizontalSpan:new{ width = gap },
         self:makeBottomButton(DASHBOARD_ICON_DIR .. "import.svg", _("Import"), button_w, function() self:openImport() end),
+        HorizontalSpan:new{ width = gap },
+        self:makeBottomButton(DASHBOARD_ICON_DIR .. "search.svg", _("Search"), button_w, function() self:openSearch() end),
         HorizontalSpan:new{ width = gap },
         self:makeBottomButton(DASHBOARD_ICON_DIR .. "settings.svg", _("Settings"), button_w, function() self:openSettings() end),
         HorizontalSpan:new{ width = gap },
@@ -918,6 +920,46 @@ function DashboardScreen:openAllCards(language, options)
         options.active_language = language
     end
     Edit.showList(self.plugin, nil, _("All cards"), options)
+end
+
+function DashboardScreen:openSearch()
+    local dialog
+    local function closeDialog()
+        if dialog then
+            if dialog.onCloseKeyboard then
+                dialog:onCloseKeyboard()
+            end
+            UIManager:close(dialog)
+            UIManager:setDirty(nil, "ui")
+        end
+    end
+    dialog = InputDialog:new{
+        title = _("Search cards"),
+        description = _("Match phrase, meaning, note, word type, pronunciation or sentence."),
+        input = "",
+        input_hint = _("Search text"),
+        buttons = { {
+            {
+                text = _("Cancel"),
+                id = "close",
+                background = Blitbuffer.COLOR_WHITE,
+                callback = closeDialog,
+            },
+            {
+                text = _("Search"),
+                is_enter_default = true,
+                background = Blitbuffer.COLOR_WHITE,
+                callback = function()
+                    local text = TextUtils.trim(dialog:getInputText() or "")
+                    closeDialog()
+                    if text == "" then return end
+                    self:openAllCards(self.data.first_language, { filter_text = text })
+                end,
+            },
+        } },
+    }
+    UIManager:show(dialog)
+    dialog:onShowKeyboard()
 end
 
 function DashboardScreen:openBook(row)

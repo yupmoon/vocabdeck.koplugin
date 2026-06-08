@@ -683,6 +683,7 @@ function Edit.showList(plugin, book_id, title, options)
         plugin = plugin,
         book_id = book_id,
         active_language = options.active_language,
+        filter_text = options.filter_text or "",
         filter_ai_status = options.filter_ai_status or false,
         filter_flagged = options.filter_flagged or false,
         filter_not_started = options.filter_not_started or false,
