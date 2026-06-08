@@ -1605,7 +1605,9 @@ function DB.getSummaryCacheVersion()
 end
 
 function DB.getSummary(book_id, require_enriched_due)
-    local cache_key = tostring(book_id or "") .. "|" .. tostring(require_enriched_due)
+    local cache_key = tostring(DB.active_language or "")
+        .. "|" .. tostring(book_id or "")
+        .. "|" .. tostring(require_enriched_due)
     local cached = _summary_cache[cache_key]
     if cached and cached.expires_at > os.time() then
         return cached.value

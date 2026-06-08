@@ -156,11 +156,12 @@ function DashboardScreen:init()
         }
     end
     self.data = getCachedData() or getLastCachedData() or emptyData(self.plugin, true)
-    self.page_padding = Screen:scaleBySize(30)
+    self.page_padding = Screen:scaleBySize(34)
     self.page_padding_top = Screen:scaleBySize(24)
     self.page_padding_bottom = Screen:scaleBySize(8)
     self.tile_gap = Screen:scaleBySize(10)
     self.section_gap = Screen:scaleBySize(12)
+    self.title_panel_gap = Screen:scaleBySize(4)
     self.card_radius = Screen:scaleBySize(12)
     self.progress_radius = Size.radius.default
     self.width = self.dimen.w - self.page_padding * 2
@@ -189,7 +190,8 @@ function DashboardScreen:updateRowHeight()
     local panel_extra = grouped_panel_count * (Size.padding.small * 2 + Size.border.thin * 2)
         + divider_count * Size.line.thin
     local fixed_h = self.topbar_h + self.tile_gap + self.stat_h
-        + self.section_gap * 4 + self.section_h * 3 + self.button_h
+        + self.section_gap * 4 + self.section_h * 3 + self.title_panel_gap * 3
+        + self.button_h
         + panel_extra
     local available_h = self.dimen.h - self.page_padding_top - self.page_padding_bottom
     self.row_h = math.floor((available_h - fixed_h) / visible_rows)
@@ -207,6 +209,7 @@ function DashboardScreen:rebuildContent()
     table.insert(content, self:makeTappableHeader(_("Languages"), function()
         self:openAllCards(self.data.first_language)
     end))
+    table.insert(content, VerticalSpan:new{ width = self.title_panel_gap })
     for _, row in ipairs(self:buildLanguageRows()) do
         table.insert(content, row)
     end
@@ -214,6 +217,7 @@ function DashboardScreen:rebuildContent()
     table.insert(content, self:makeTappableHeader(_("Books"), function()
         self:openAllBooks()
     end))
+    table.insert(content, VerticalSpan:new{ width = self.title_panel_gap })
     for _, row in ipairs(self:buildBookRows()) do
         table.insert(content, row)
     end
@@ -221,6 +225,7 @@ function DashboardScreen:rebuildContent()
     table.insert(content, self:makeTappableHeader(_("Attention"), function()
         self:openAttention()
     end))
+    table.insert(content, VerticalSpan:new{ width = self.title_panel_gap })
     for _, row in ipairs(self:buildAttentionRows()) do
         table.insert(content, row)
     end
@@ -328,7 +333,7 @@ function DashboardScreen:makeStatCell(label, value, width, callback)
                         dimen = Geom:new{ w = width - padding * 2, h = math.floor(self.stat_h * 0.38) },
                         TextWidget:new{
                             text = label,
-                            face = Font:getFace("smallinfofontbold"),
+                            face = Font:getFace("smallinfofont"),
                         },
                     },
                     CenterContainer:new{
@@ -513,6 +518,7 @@ end
 
 function DashboardScreen:makeLanguagePanelRow(row)
     local inner_w = self.panel_inner_w
+    local chevron_pad = Size.padding.small
     local name_w = math.floor(inner_w * 0.31)
     local due_w = math.floor(inner_w * 0.14)
     local new_w = math.floor(inner_w * 0.14)
@@ -520,7 +526,8 @@ function DashboardScreen:makeLanguagePanelRow(row)
     local bar_w = math.floor(inner_w * 0.20)
     local pct_gap_w = math.floor(inner_w * 0.02)
     local pct_w = math.floor(inner_w * 0.08)
-    local chevron_w = inner_w - name_w - due_w - new_w - leading_spacer_w - bar_w - pct_gap_w - pct_w
+    local chevron_w = inner_w - name_w - due_w - new_w - leading_spacer_w
+        - bar_w - pct_gap_w - pct_w - chevron_pad
     local percent, pct = self:languageProgress(row)
     local meta_size = self.meta_font_size
     return self:makePanelRow(HorizontalGroup:new{
@@ -535,6 +542,7 @@ function DashboardScreen:makeLanguagePanelRow(row)
         HorizontalSpan:new{ width = pct_gap_w },
         self:makeColumnText(pct, pct_w, "smallinfofont", "left", meta_size),
         self:makeColumnText(CHEVRON, chevron_w, "smallinfofontbold", "right"),
+        HorizontalSpan:new{ width = chevron_pad },
     }, function()
         self:openStudy(row.language)
     end, inner_w)
@@ -542,16 +550,18 @@ end
 
 function DashboardScreen:makeBookPanelRow(row)
     local inner_w = self.panel_inner_w
+    local chevron_pad = Size.padding.small
     local title_w = math.floor(inner_w * 0.58)
     local due_w = math.floor(inner_w * 0.15)
     local total_w = math.floor(inner_w * 0.21)
-    local chevron_w = inner_w - title_w - due_w - total_w
+    local chevron_w = inner_w - title_w - due_w - total_w - chevron_pad
     local meta_size = self.meta_font_size
     return self:makePanelRow(HorizontalGroup:new{
         self:makeColumnText(shortText(row.title, 24), title_w, "smallinfofont", "left"),
         self:makeColumnText(string.format(_("Due %d"), row.due), due_w, "smallinfofont", "left", meta_size),
         self:makeColumnText(string.format(_("Total %d"), row.total), total_w, "smallinfofont", "left", meta_size),
         self:makeColumnText(CHEVRON, chevron_w, "smallinfofontbold", "right"),
+        HorizontalSpan:new{ width = chevron_pad },
     }, function()
         self:openBook(row)
     end, inner_w)
@@ -559,15 +569,17 @@ end
 
 function DashboardScreen:makeAttentionPanelRow(icon, text, callback, width)
     local inner_w = width or self.width
+    local chevron_pad = Size.padding.small
     local icon_w = math.floor(inner_w * 0.08)
     local text_w = math.floor(inner_w * 0.82)
-    local chevron_w = inner_w - icon_w - text_w
+    local chevron_w = inner_w - icon_w - text_w - chevron_pad
     local row = InputContainer:new{
         dimen = Geom:new{ x = 0, y = 0, w = inner_w, h = self.row_h },
         HorizontalGroup:new{
             self:makeColumnText(icon, icon_w, "smallinfofont", "center"),
             self:makeColumnText(text, text_w, "smallinfofont", "left"),
             self:makeColumnText(callback and CHEVRON or "", chevron_w, "smallinfofontbold", "right"),
+            HorizontalSpan:new{ width = chevron_pad },
         },
     }
     if Device:isTouchDevice() then
@@ -649,12 +661,12 @@ function DashboardScreen:makeBottomButton(icon_file, label, width, callback)
                 },
                 CenterContainer:new{
                     dimen = Geom:new{ w = inner_w, h = label_h },
-                        TextBoxWidget:new{
-                            text = label,
-                            face = Font:getFace("smallinfofont", 13),
-                            width = inner_w,
-                            alignment = "center",
-                            height_overflow_show_ellipsis = true,
+                    TextBoxWidget:new{
+                        text = label,
+                        face = Font:getFace("smallinfofont", 14),
+                        width = inner_w,
+                        alignment = "center",
+                        height_overflow_show_ellipsis = true,
                     },
                 },
             },
