@@ -46,6 +46,7 @@ local MAX_BOOK_ROWS = 3
 local ICON_WEAK = "\226\154\160"      -- warning sign
 local ICON_MISSING = "\226\150\163"   -- document-like outline
 local ICON_LEECH = "\226\134\187" -- refresh/loop
+local ICON_SUSPENDED = "\226\143\184" -- pause
 local CHEVRON = "\226\128\186"
 local MODULE_DIR = (debug.getinfo(1, "S").source or ""):match("^@(.*/)")
     or "plugins/vocabdeck.koplugin/"
@@ -178,10 +179,13 @@ function DashboardScreen:updateRowHeight()
     local Screen = Device.screen
     local language_rows = self.data.loading and 1 or math.min(#(self.data.languages or {}), MAX_LANGUAGE_ROWS)
     local book_rows = self.data.loading and 1 or math.min(#(self.data.books or {}), MAX_BOOK_ROWS)
-    local visible_rows = language_rows + book_rows + 3
+    local attention_rows = self:getVisibleAttentionRowCount()
+    local visible_rows = language_rows + book_rows + attention_rows
     visible_rows = math.max(visible_rows, 1)
-    local grouped_panel_count = 3
-    local divider_count = math.max(0, language_rows - 1) + math.max(0, book_rows - 1) + 2
+    local grouped_panel_count = 2 + (attention_rows > 0 and 1 or 0)
+    local divider_count = math.max(0, language_rows - 1)
+        + math.max(0, book_rows - 1)
+        + math.max(0, attention_rows - 1)
     local panel_extra = grouped_panel_count * (Size.padding.small * 2 + Size.border.thin * 2)
         + divider_count * Size.line.thin
     local fixed_h = self.topbar_h + self.tile_gap + self.stat_h
@@ -213,7 +217,17 @@ function DashboardScreen:rebuildContent()
     for _, row in ipairs(self:buildBookRows()) do
         table.insert(content, row)
     end
-    self:addSection(content, _("Attention"), { self:buildAttentionRows() })
+    table.insert(content, VerticalSpan:new{ width = self.section_gap })
+    table.insert(content, self:makeTappableHeader(_("Attention"), function()
+        self:openAttention()
+    end))
+    for _, row in ipairs(self:buildAttentionRows()) do
+        table.insert(content, row)
+    end
+    local attention_spacer_h = self:getAttentionReserveSpacerHeight()
+    if attention_spacer_h > 0 then
+        table.insert(content, VerticalSpan:new{ width = attention_spacer_h })
+    end
     table.insert(content, VerticalSpan:new{ width = self.section_gap })
     table.insert(content, self:buildBottomButtons())
 
@@ -553,7 +567,7 @@ function DashboardScreen:makeAttentionPanelRow(icon, text, callback, width)
         HorizontalGroup:new{
             self:makeColumnText(icon, icon_w, "smallinfofont", "center"),
             self:makeColumnText(text, text_w, "smallinfofont", "left"),
-            self:makeColumnText(CHEVRON, chevron_w, "smallinfofontbold", "right"),
+            self:makeColumnText(callback and CHEVRON or "", chevron_w, "smallinfofontbold", "right"),
         },
     }
     if Device:isTouchDevice() then
@@ -688,12 +702,67 @@ function DashboardScreen:addSection(content, title, rows)
     end
 end
 
+function DashboardScreen:getAttentionItems()
+    local summary = self.data.summary or {}
+    return {
+        {
+            icon = ICON_WEAK,
+            count = n(summary.weak_cards),
+            text = string.format(_("%d weak cards"), n(summary.weak_cards)),
+            callback = function() self:openWeakCards() end,
+        },
+        {
+            icon = ICON_MISSING,
+            count = n(summary.missing_ai),
+            text = string.format(_("%d missing AI data"), n(summary.missing_ai)),
+            callback = function() self:openMissingAI() end,
+        },
+        {
+            icon = ICON_LEECH,
+            count = n(summary.leeches),
+            text = string.format(_("%d leeches"), n(summary.leeches)),
+            callback = function() self:openLeeches() end,
+        },
+        {
+            icon = ICON_SUSPENDED,
+            count = n(summary.suspended),
+            text = string.format(_("%d suspended cards"), n(summary.suspended)),
+            callback = function() self:openSuspendedCards() end,
+        },
+    }
+end
+
+function DashboardScreen:getVisibleAttentionRowCount()
+    return 3
+end
+
+function DashboardScreen:getRenderedAttentionRowCount()
+    if self.data.loading then
+        return 1
+    end
+    local count = 0
+    for _, item in ipairs(self:getAttentionItems()) do
+        if item.count > 0 then
+            count = count + 1
+        end
+    end
+    return math.max(1, math.min(3, count))
+end
+
+function DashboardScreen:getAttentionReserveSpacerHeight()
+    local missing_rows = 3 - self:getRenderedAttentionRowCount()
+    if missing_rows <= 0 then
+        return 0
+    end
+    return missing_rows * (self.row_h + Size.line.thin)
+end
+
 function DashboardScreen:buildStatsRow()
     local summary = self.data.summary or {}
     local due = n(summary.due)
     local new = n(summary.available_new)
-    local weak = n(summary.weak_cards)
-    local suspended = n(summary.suspended)
+    local learned = n(summary.reviewed)
+    local mature = n(summary.mature)
     local gap = self.tile_gap
     local cell_w = math.floor((self.width - gap * 3) / 4)
     return HorizontalGroup:new{
@@ -715,13 +784,9 @@ function DashboardScreen:buildStatsRow()
             })
         end),
         HorizontalSpan:new{ width = gap },
-        self:makeStatCell(_("Weak"), weak, cell_w, function()
-            self:openWeakCards()
-        end),
+        self:makeStatCell(_("Learned"), learned, cell_w),
         HorizontalSpan:new{ width = gap },
-        self:makeStatCell(_("Suspended"), suspended, self.width - cell_w * 3 - gap * 3, function()
-            self:openSuspendedCards()
-        end),
+        self:makeStatCell(_("Mature"), mature, self.width - cell_w * 3 - gap * 3),
     }
 end
 
@@ -788,27 +853,23 @@ end
 function DashboardScreen:buildAttentionRows()
     self.panel_inner_w = self.width - (Size.padding.small + Size.border.thin) * 2
     if self.data.loading then
-        return self:makeAttentionPanel({
+        return { self:makeAttentionPanel({
             self:makeAttentionPanelRow("", _("Loading..."), nil, self.panel_inner_w),
-            self:makeAttentionPanelRow("", "", nil, self.panel_inner_w),
-            self:makeAttentionPanelRow("", "", nil, self.panel_inner_w),
-        })
+        }) }
     end
-    local summary = self.data.summary or {}
-    local weak = n(summary.weak_cards)
-    local missing = n(summary.missing_ai)
-    local leeches = n(summary.leeches)
-    return self:makeAttentionPanel({
-        self:makeAttentionPanelRow(ICON_WEAK, string.format(_("%d weak cards"), weak), function()
-            self:openWeakCards()
-        end, self.panel_inner_w),
-        self:makeAttentionPanelRow(ICON_MISSING, string.format(_("%d missing AI data"), missing), function()
-            self:openMissingAI()
-        end, self.panel_inner_w),
-        self:makeAttentionPanelRow(ICON_LEECH, string.format(_("%d leeches"), leeches), function()
-            self:openLeeches()
-        end, self.panel_inner_w),
-    })
+    local rows = {}
+    for _, item in ipairs(self:getAttentionItems()) do
+        if item.count > 0 then
+            rows[#rows + 1] = self:makeAttentionPanelRow(item.icon, item.text, item.callback, self.panel_inner_w)
+            if #rows >= 3 then
+                break
+            end
+        end
+    end
+    if #rows == 0 then
+        rows[#rows + 1] = self:makeAttentionPanelRow("", _("No attention items"), nil, self.panel_inner_w)
+    end
+    return { self:makeAttentionPanel(rows) }
 end
 
 function DashboardScreen:buildBottomButtons()
@@ -934,6 +995,28 @@ function DashboardScreen:openAllBooks()
     local screen = Device.screen
     UIManager:show(Menu:new{
         title = _("Books"),
+        item_table = items,
+        covers_fullscreen = true,
+        width = math.floor(screen:getWidth() * 0.9),
+        height = math.floor(screen:getHeight() * 0.9),
+    })
+end
+
+function DashboardScreen:openAttention()
+    if self.data.loading then
+        UIManager:show(InfoMessage:new{ text = _("Dashboard is still loading."), timeout = 2 })
+        return
+    end
+    local items = {}
+    for _, item in ipairs(self:getAttentionItems()) do
+        items[#items + 1] = {
+            text = item.text,
+            callback = item.callback,
+        }
+    end
+    local screen = Device.screen
+    UIManager:show(Menu:new{
+        title = _("Attention"),
         item_table = items,
         covers_fullscreen = true,
         width = math.floor(screen:getWidth() * 0.9),

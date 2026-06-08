@@ -1781,7 +1781,7 @@ function DB.getDashboardSummary(options)
     local function addSummaryTotals(total, summary)
         for _, key in ipairs{
             "total", "pending", "failed", "new", "reviewed", "learning",
-            "flagged", "known", "lapsed_cards",
+            "mature", "flagged", "known", "lapsed_cards",
         } do
             total[key] = summaryNumber(total[key]) + summaryNumber(summary and summary[key])
         end
