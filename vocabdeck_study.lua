@@ -183,6 +183,7 @@ function StudyScreen:init()
             text = text,
             background = Blitbuffer.COLOR_WHITE,
             callback = callback,
+            show_parent = self,
             text_font_face = "cfont",
             text_font_bold = false,
             width = width,
@@ -784,6 +785,14 @@ function StudyScreen:showActionMenu()
     StudyActions.showMenu(self)
 end
 
+function StudyScreen:notifyAfterClose()
+    if self.after_close_notified then return end
+    self.after_close_notified = true
+    if self.after_close then
+        self.after_close()
+    end
+end
+
 function StudyScreen:onRate(rating, advance_delay)
     if not self.current_card then return end
     self:invalidateAutoRate()
@@ -983,6 +992,7 @@ end
 function StudyScreen:onClose()
     self:invalidateAutoRate()
     self:invalidateAdvance()
+    self:notifyAfterClose()
     UIManager:close(self)
     -- Request a full refresh so the reader screen behind us is redrawn
     -- cleanly (no leftover pixels from the deck screen).
@@ -993,6 +1003,7 @@ end
 function StudyScreen:onCloseWidget()
     self:invalidateAutoRate()
     self:invalidateAdvance()
+    self:notifyAfterClose()
     -- Also fires on system dismissals (e.g. the user presses Back or switches
     -- documents). Same motivation as onClose.
     UIManager:setDirty(nil, "full")

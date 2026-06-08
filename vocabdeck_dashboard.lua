@@ -905,7 +905,11 @@ function DashboardScreen:openStudy(language)
         UIManager:show(InfoMessage:new{ text = _("No study deck available."), timeout = 3 })
         return
     end
-    StudyEntry.startStudy(self.plugin, language)
+    StudyEntry.startStudy(self.plugin, language, {
+        after_close = function()
+            Dashboard.invalidateCache()
+        end,
+    })
 end
 
 function DashboardScreen:openAllCards(language, options)

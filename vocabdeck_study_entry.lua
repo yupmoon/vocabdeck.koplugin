@@ -10,7 +10,8 @@ local DB = require("vocabdeck_db")
 
 local StudyEntry = {}
 
-function StudyEntry.startStudy(plugin, language)
+function StudyEntry.startStudy(plugin, language, options)
+    options = options or {}
     plugin:saveSetting("last_study_source_language", language)
     DB.setLanguage(language)
     local StudyScreen = require("vocabdeck_study")
@@ -18,6 +19,7 @@ function StudyEntry.startStudy(plugin, language)
         plugin = plugin,
         source_language = language,
         book_title = language,
+        after_close = options.after_close,
     }
     UIManager:show(study)
 end
