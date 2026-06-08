@@ -966,7 +966,22 @@ function DashboardScreen:openSettings()
         end
         return items
     end
-    local settings_items = materializeSubmenus(SettingsModule.buildMenuItems(self.plugin, refresh_proxy))
+    local trailing_items = {
+        {
+            text = _("Import from Vocabulary Builder"),
+            enabled_func = function()
+                return self.plugin
+                    and self.plugin.getDocumentFilePath
+                    and self.plugin:getDocumentFilePath() ~= nil
+            end,
+            callback = function()
+                Importer.showImportDialog(self.plugin)
+            end,
+        },
+    }
+    local settings_items = materializeSubmenus(
+        SettingsModule.buildFullMenuItems(self.plugin, refresh_proxy, trailing_items)
+    )
     settings_menu = Menu:new{
         title = _("Settings"),
         item_table = settings_items,

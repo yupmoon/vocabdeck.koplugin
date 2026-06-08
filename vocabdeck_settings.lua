@@ -295,7 +295,7 @@ local function makeProviderItems(plugin, parent_menu_instance)
             text = _("No providers are configured."),
             enabled = false,
         }
-        return items
+        return parent_menu_instance and appendBackItem(items, parent_menu_instance) or items
     end
     for _, name in ipairs(providers) do
         items[#items + 1] = {
@@ -320,19 +320,19 @@ local function makeProviderItems(plugin, parent_menu_instance)
             end,
         }
     end
-    return items
+    return parent_menu_instance and appendBackItem(items, parent_menu_instance) or items
 end
 
 local function makeModelItems(plugin, provider, parent_menu_instance)
     local items = {}
     if not provider then
         items[#items + 1] = { text = _("No provider selected."), enabled = false }
-        return items
+        return parent_menu_instance and appendBackItem(items, parent_menu_instance) or items
     end
     local models = getModelOptions(plugin, provider)
     if #models == 0 then
         items[#items + 1] = { text = _("No model list is available for this provider."), enabled = false }
-        return items
+        return parent_menu_instance and appendBackItem(items, parent_menu_instance) or items
     end
     for _, model in ipairs(models) do
         items[#items + 1] = {
@@ -351,7 +351,7 @@ local function makeModelItems(plugin, provider, parent_menu_instance)
             end,
         }
     end
-    return items
+    return parent_menu_instance and appendBackItem(items, parent_menu_instance) or items
 end
 
 function goBackFromSubmenu(menu_instance)
@@ -394,27 +394,27 @@ local function makeFieldItems(plugin, side, parent_menu_instance)
     return appendBackItem(items, parent_menu_instance)
 end
 
-local function makeProviderMenuItem(plugin)
+local function makeProviderMenuItem(plugin, add_back_row)
     return {
         text = _("Provider"),
         text_func = function()
             return string.format(_("Provider: %s"), providerLabel(getCurrentProvider(plugin)))
         end,
-        sub_item_table_func = function()
-            return makeProviderItems(plugin)
+        sub_item_table_func = function(parent_menu_instance)
+            return makeProviderItems(plugin, add_back_row and parent_menu_instance or nil)
         end,
     }
 end
 
-local function makeModelMenuItem(plugin)
+local function makeModelMenuItem(plugin, add_back_row)
     return {
         text = _("Model"),
         text_func = function()
             local provider = getCurrentProvider(plugin)
             return string.format(_("Model: %s"), getProviderModel(plugin, provider))
         end,
-        sub_item_table_func = function()
-            return makeModelItems(plugin, getCurrentProvider(plugin))
+        sub_item_table_func = function(parent_menu_instance)
+            return makeModelItems(plugin, getCurrentProvider(plugin), add_back_row and parent_menu_instance or nil)
         end,
     }
 end
@@ -709,13 +709,29 @@ local function makeManualAdvanceItems(plugin, refreshMenu, touchmenu_instance)
     return appendBackItem(items, touchmenu_instance)
 end
 
-function Settings.buildAiMenuItems(plugin)
+function Settings.buildAiMenuItems(plugin, add_back_rows)
     return {
-        makeProviderMenuItem(plugin),
-        makeModelMenuItem(plugin),
+        makeProviderMenuItem(plugin, add_back_rows),
+        makeModelMenuItem(plugin, add_back_rows),
         makeApiKeyMenuItem(plugin),
         makeAiContextWordsMenuItem(plugin),
     }
+end
+
+function Settings.buildFullMenuItems(plugin, default_touchmenu_instance, trailing_items)
+    local items = {}
+    for _, item in ipairs(Settings.buildMenuItems(plugin, default_touchmenu_instance)) do
+        items[#items + 1] = item
+    end
+    if trailing_items then
+        for _, item in ipairs(trailing_items) do
+            items[#items + 1] = item
+        end
+    end
+    for _, item in ipairs(Settings.buildAiMenuItems(plugin, true)) do
+        items[#items + 1] = item
+    end
+    return items
 end
 
 function Settings.buildMenuItems(plugin, default_touchmenu_instance)
