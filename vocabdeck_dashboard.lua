@@ -165,6 +165,7 @@ function DashboardScreen:init()
     self.section_gap = Screen:scaleBySize(12)
     self.title_panel_gap = Screen:scaleBySize(4)
     self.card_radius = Screen:scaleBySize(12)
+    self.panel_border = math.max(Size.border.thin, Screen:scaleBySize(2))
     self.progress_radius = Size.radius.default
     self.width = self.dimen.w - self.page_padding * 2
     self.left_margin = 0
@@ -189,7 +190,7 @@ function DashboardScreen:updateRowHeight()
     local divider_count = math.max(0, language_rows - 1)
         + math.max(0, book_rows - 1)
         + math.max(0, attention_rows - 1)
-    local panel_extra = grouped_panel_count * (Size.padding.small * 2 + Size.border.thin * 2)
+    local panel_extra = grouped_panel_count * (Size.padding.small * 2 + self.panel_border * 2)
         + divider_count * Size.line.thin
     local fixed_h = self.topbar_h + self.tile_gap + self.stat_h
         + self.section_gap * 4 + self.section_h * 3 + self.title_panel_gap * 3
@@ -325,7 +326,7 @@ function DashboardScreen:makeStatCell(label, value, width, callback)
         FrameContainer:new{
             dimen = Geom:new{ w = width, h = self.stat_h },
             padding = padding,
-            bordersize = Size.border.thin,
+            bordersize = self.panel_border,
             radius = self.card_radius,
             background = Blitbuffer.COLOR_WHITE,
             CenterContainer:new{
@@ -418,7 +419,7 @@ function DashboardScreen:makeRow(content, callback)
         FrameContainer:new{
             dimen = Geom:new{ x = 0, y = 0, w = self.width, h = self.row_h },
             padding = padding,
-            bordersize = Size.border.thin,
+            bordersize = self.panel_border,
             radius = self.card_radius,
             background = Blitbuffer.COLOR_WHITE,
             content,
@@ -511,7 +512,7 @@ function DashboardScreen:makeGroupedPanel(rows)
     return FrameContainer:new{
         dimen = Geom:new{ x = 0, y = 0, w = self.width, h = panel_h },
         padding = Size.padding.small,
-        bordersize = Size.border.thin,
+        bordersize = self.panel_border,
         radius = self.card_radius,
         background = Blitbuffer.COLOR_WHITE,
         content,
@@ -805,7 +806,7 @@ function DashboardScreen:buildStatsRow()
 end
 
 function DashboardScreen:buildLanguageRows()
-    self.panel_inner_w = self.width - (Size.padding.small + Size.border.thin) * 2
+    self.panel_inner_w = self.width - Size.padding.small * 2 - self.panel_border * 2
     local rows = {}
     if self.data.loading then
         return { self:makeGroupedPanel({
@@ -835,7 +836,7 @@ function DashboardScreen:buildLanguageRows()
 end
 
 function DashboardScreen:buildBookRows()
-    self.panel_inner_w = self.width - (Size.padding.small + Size.border.thin) * 2
+    self.panel_inner_w = self.width - Size.padding.small * 2 - self.panel_border * 2
     local rows = {}
     if self.data.loading then
         return { self:makeGroupedPanel({
@@ -865,7 +866,7 @@ function DashboardScreen:buildBookRows()
 end
 
 function DashboardScreen:buildAttentionRows()
-    self.panel_inner_w = self.width - (Size.padding.small + Size.border.thin) * 2
+    self.panel_inner_w = self.width - Size.padding.small * 2 - self.panel_border * 2
     if self.data.loading then
         return { self:makeAttentionPanel({
             self:makeAttentionPanelRow("", _("Loading..."), nil, self.panel_inner_w),
