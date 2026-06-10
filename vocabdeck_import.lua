@@ -354,7 +354,6 @@ local function buildAnkiLanguageItems(plugin, path)
         items[#items + 1] = {
             text = language,
             callback = function()
-                DB.setLanguage(language)
                 Importer.showAnkiMappingDialog(plugin, language, path)
             end,
         }
@@ -634,13 +633,6 @@ end
 
 -- Import entries belonging to the active book into `book_id`.
 function Importer.importForBook(plugin, book_id, book_title, source_language)
-    if not book_id then
-        UIManager:show(InfoMessage:new{
-            text = _("Cannot import — no book record is available."),
-            timeout = 3,
-        })
-        return
-    end
     if not vocabDbExists() then
         UIManager:show(InfoMessage:new{
             text = _("Vocabulary Builder database not found. Open a book and look up at least one word first."),
@@ -687,6 +679,30 @@ function Importer.importForBook(plugin, book_id, book_title, source_language)
             }
         end
     end
+    if #cards == 0 then
+        UIManager:show(InfoMessage:new{ text = _("No importable words found."), timeout = 3 })
+        return
+    end
+
+    if not book_id then
+        local filepath = plugin:getDocumentFilePath()
+        if not filepath then
+            UIManager:show(InfoMessage:new{
+                text = _("Cannot import — no book record is available."),
+                timeout = 3,
+            })
+            return
+        end
+        DB.setLanguage(source_language)
+        book_id = DB.getOrCreateBook(book_title, filepath, source_language)
+        if not book_id then
+            UIManager:show(InfoMessage:new{
+                text = _("Could not prepare book record."),
+                timeout = 3,
+            })
+            return
+        end
+    end
     imported, skipped = DB.addCardsIfMissing(book_id, cards)
 
     local msg = string.format(
@@ -710,15 +726,6 @@ function Importer.showImportDialog(plugin)
         return
     end
     local source_language = plugin:getDocumentSourceLanguage()
-    DB.setLanguage(source_language)
-    local book_id = DB.getOrCreateBook(book_title, filepath, source_language)
-    if not book_id then
-        UIManager:show(InfoMessage:new{
-            text = _("Could not prepare book record."),
-            timeout = 3,
-        })
-        return
-    end
     UIManager:show(ConfirmBox:new{
         text = string.format(
             _("Import all Vocabulary Builder entries recorded for \"%s\" into this book's VocabDeck?"),
@@ -726,7 +733,7 @@ function Importer.showImportDialog(plugin)
         ),
         ok_text = _("Import"),
         ok_callback = function()
-            Importer.importForBook(plugin, book_id, book_title, source_language)
+            Importer.importForBook(plugin, nil, book_title, source_language)
         end,
     })
 end

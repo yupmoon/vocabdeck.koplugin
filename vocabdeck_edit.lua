@@ -207,7 +207,14 @@ function VocabDeckCardList:_buildLanguageTabs()
     end
     if not self.active_language then
         local current = DB.getActiveLanguage()
-        self.active_language = current or languages[1]
+        local has_current = false
+        for _, language in ipairs(languages) do
+            if language == current then
+                has_current = true
+                break
+            end
+        end
+        self.active_language = has_current and current or languages[1]
         DB.setLanguage(self.active_language)
     end
     local tab_group = HorizontalGroup:new{}

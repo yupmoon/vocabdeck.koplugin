@@ -516,8 +516,28 @@ function DB.getActiveLanguage()
     return DB.active_language
 end
 
+local function languageDbHasCards(language)
+    local path = dbPathForLanguage(language)
+    if not lfs.attributes(path, "mode") then
+        return false
+    end
+    local ok, count = pcall(function()
+        local conn = SQ3.open(path)
+        local has_cards_table = conn:rowexec("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'cards' LIMIT 1;")
+        if not has_cards_table then
+            conn:close()
+            return 0
+        end
+        local total = tonumber(conn:rowexec("SELECT COUNT(*) FROM cards;")) or 0
+        conn:close()
+        return total
+    end)
+    return ok and tonumber(count) and tonumber(count) > 0
+end
+
 -- Scan the data directory for per-language .sqlite3 files and return
--- a sorted list of language names. Excludes the legacy file and backups.
+-- a sorted list of language names that actually contain cards. Excludes the
+-- legacy file, backups, and empty DBs created by read-only lookups.
 function DB.listLanguages()
     ensureDirectory()
     local languages = {}
@@ -525,7 +545,7 @@ function DB.listLanguages()
     for file in lfs.dir(DB_DIRECTORY) do
         if file:match("%.sqlite3$") and not file:match("%-backup") and file ~= "vocabdeck.sqlite3" then
             local lang = file:gsub("%.sqlite3$", "")
-            if lang ~= "" then
+            if lang ~= "" and languageDbHasCards(lang) then
                 languages[#languages + 1] = lang
             end
         end
@@ -903,10 +923,18 @@ function DB.findBookWithCardsByFilepath(filepath, preferred_language, restore_pr
     end
 
     local previous_language = DB.active_language
+    local available_list = DB.listLanguages()
+    local available_languages = {}
+    for _, language in ipairs(available_list) do
+        available_languages[normalizeSourceLanguage(language)] = true
+    end
     local languages = {}
     local seen = {}
-    local function addLanguage(language)
+    local function addLanguage(language, allow_missing)
         language = normalizeSourceLanguage(language)
+        if language ~= "" and not allow_missing and not available_languages[language] then
+            return
+        end
         local key = language ~= "" and language or "__legacy__"
         if not seen[key] then
             seen[key] = true
@@ -916,10 +944,10 @@ function DB.findBookWithCardsByFilepath(filepath, preferred_language, restore_pr
 
     addLanguage(preferred_language)
     addLanguage(previous_language)
-    for _, language in ipairs(DB.listLanguages()) do
-        addLanguage(language)
+    for _, language in ipairs(available_list) do
+        addLanguage(language, true)
     end
-    addLanguage(nil)
+    addLanguage(nil, true)
 
     for _, entry in ipairs(languages) do
         DB.setLanguage(entry.language)
@@ -1815,12 +1843,17 @@ function DB.getDashboardSummary(options)
     local previous_language = DB.getActiveLanguage()
     local ok, result = pcall(function()
         local languages = options.languages or DB.listLanguages()
+        local has_language = {}
+        for _, language in ipairs(languages) do
+            has_language[language] = true
+        end
+        local first_language = has_language[previous_language or ""] and previous_language or languages[1]
         local data = {
             summary = {},
             languages = {},
             books = {},
             first_due_language = nil,
-            first_language = previous_language or languages[1],
+            first_language = first_language,
             missing_ai_language = nil,
             weak_language = nil,
             leech_language = nil,

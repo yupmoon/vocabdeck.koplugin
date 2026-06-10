@@ -41,15 +41,7 @@ local function getCurrentBookId(plugin)
     if book_id then
         return book_id
     end
-
-    if source_language and source_language ~= "" then
-        DB.setLanguage(source_language)
-    end
-    book_id = DB.getOrCreateBook(plugin:getDocumentTitle(), filepath, source_language)
-    if not book_id then
-        return nil, _("Could not prepare book record.")
-    end
-    return book_id
+    return nil, _("No cards for this book yet.")
 end
 
 function Menu.build(plugin, config_error, plugin_version)
