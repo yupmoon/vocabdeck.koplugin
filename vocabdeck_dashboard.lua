@@ -1025,14 +1025,7 @@ function DashboardScreen:openSuspendedCards()
 end
 
 function DashboardScreen:openImport()
-    if not self.plugin or not self.plugin.getDocumentFilePath or not self.plugin:getDocumentFilePath() then
-        UIManager:show(InfoMessage:new{
-            text = _("Open a book to import its Vocabulary Builder words."),
-            timeout = 3,
-        })
-        return
-    end
-    Importer.showImportDialog(self.plugin)
+    Importer.showImportMenu(self.plugin)
 end
 
 function DashboardScreen:openAllBooks()
@@ -1119,6 +1112,12 @@ function DashboardScreen:openSettings()
             end,
             callback = function()
                 Importer.showImportDialog(self.plugin)
+            end,
+        },
+        {
+            text = _("Import from Anki text"),
+            callback = function()
+                Importer.showAnkiImportDialog(self.plugin)
             end,
         },
     }

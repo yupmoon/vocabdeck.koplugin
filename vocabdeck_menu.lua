@@ -118,6 +118,12 @@ function Menu.build(plugin, config_error, plugin_version)
         sub_item_table_func = function(touchmenu_instance)
             local sub_items = SettingsModule.buildMenuItems(plugin, touchmenu_instance)
             table.insert(sub_items, 1, {
+                text = _("Import from Anki text"),
+                callback = function()
+                    Importer.showAnkiImportDialog(plugin)
+                end,
+            })
+            table.insert(sub_items, 1, {
                 text = _("Import from Vocabulary Builder"),
                 enabled_func = function() return hasCurrentBook(plugin) end,
                 callback = function()
