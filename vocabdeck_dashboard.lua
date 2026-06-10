@@ -911,6 +911,7 @@ function DashboardScreen:openStudy(language)
     StudyEntry.startStudy(self.plugin, language, {
         after_close = function()
             Dashboard.invalidateCache()
+            self:scheduleRefresh(true)
         end,
     })
 end
