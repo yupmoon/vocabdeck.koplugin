@@ -27,7 +27,7 @@ local Grammar = require("vocabdeck_grammar")
 local StudyEntry = require("vocabdeck_study_entry")
 
 local SETTINGS_FILE = DataStorage:getSettingsDir() .. "/vocabdeck.lua"
-local PLUGIN_VERSION = "1.2.0"
+local PLUGIN_VERSION = "1.2.1"
 
 local CONFIGURATION, CONFIG_ERROR = Config.load()
 

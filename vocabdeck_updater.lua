@@ -106,11 +106,14 @@ end
 
 --- Show an InfoMessage and force a repaint so it appears immediately.
 local function showMessage(text, timeout)
-    local msg = InfoMessage:new{
+    local opts = {
         text = _(text),
-        timeout = timeout or 0,
         dismissable = false,
     }
+    if timeout ~= nil then
+        opts.timeout = timeout
+    end
+    local msg = InfoMessage:new(opts)
     UIManager:show(msg)
     UIManager:forceRePaint()
     return msg
@@ -119,6 +122,7 @@ end
 --- Close a widget previously shown with showMessage().
 local function closeMessage(msg)
     if msg then
+        msg.dismiss_callback = nil
         UIManager:close(msg)
     end
 end
