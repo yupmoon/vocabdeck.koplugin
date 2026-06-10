@@ -192,7 +192,7 @@ local CHECK_INTERVAL = 3600  -- seconds between network checks (1 hour)
 local GS_KEY_TIME  = "vocabdeck_last_update_check"
 local GS_KEY_AVAIL = "vocabdeck_update_available"
 local GS_KEY_VER   = "vocabdeck_latest_version"
-local GS_KEY_DESC  = "vocabdeck_latest_description"
+local GS_KEY_ZIP   = "vocabdeck_latest_zip_url"
 
 --- Load reader settings helper.
 local function getGS()
@@ -200,7 +200,7 @@ local function getGS()
     return (ok and gs) or nil
 end
 
---- Check for updates. Caches result for 24h so repeated taps don't hit
+--- Check for updates. Caches result for 1 hour so repeated taps don't hit
 --- the network. Shows dialogs directly — no Trapper coroutine needed
 --- for the check (blocking HTTP is fine for user-initiated actions).
 function Updater.check(plugin, current_version)
@@ -235,20 +235,24 @@ function Updater.check(plugin, current_version)
     if (now - last_num) < CHECK_INTERVAL and gs then
         local cached_avail = gs:readSetting(GS_KEY_AVAIL) == true
         local cached_ver   = gs:readSetting(GS_KEY_VER) or ""
-        local cached_desc  = gs:readSetting(GS_KEY_DESC) or ""
+        local cached_zip   = gs:readSetting(GS_KEY_ZIP) or ""
         if cached_avail and semverGt(cached_ver, current_version) then
-            UIManager:show(InfoMessage:new{
-                text = T(_("Update available\n\nv%1 → v%2\n\n%3"), current_version, cached_ver, cached_desc),
-                dismiss_callback = function()
-                    UIManager:show(ConfirmBox:new{
-                        text = _("Download and install this update?"),
-                        ok_text = _("Update"),
-                        ok_callback = function()
-                            Updater._install(plugin_dir, {
-                                version = cached_ver,
-                                zip_url = meta.update_url:gsub("/releases/latest", "/zipball/v" .. cached_ver),
-                            })
-                        end,
+            UIManager:show(ConfirmBox:new{
+                text = T(_("VocabDeck v%1 is available.\n\nCurrent version: v%2\n\nDownload and install now?"), cached_ver, current_version),
+                ok_text = _("Update"),
+                ok_callback = function()
+                    if Device.isEmulator() then
+                        UIManager:show(InfoMessage:new{
+                            text = _("Emulator detected.\nUpdates are not applied in the emulator."),
+                        })
+                        return
+                    end
+                    if cached_zip == "" then
+                        cached_zip = meta.update_url:gsub("/releases/latest", "/zipball/v" .. cached_ver)
+                    end
+                    Updater._install(plugin_dir, {
+                        version = cached_ver,
+                        zip_url = cached_zip,
                     })
                 end,
             })
@@ -297,7 +301,7 @@ function Updater.check(plugin, current_version)
         gs:saveSetting(GS_KEY_TIME, now)
         gs:saveSetting(GS_KEY_AVAIL, has_upd)
         gs:saveSetting(GS_KEY_VER, release.version)
-        gs:saveSetting(GS_KEY_DESC, release.description or "")
+        gs:saveSetting(GS_KEY_ZIP, release.zip_url or "")
         pcall(gs.flush, gs)
     end
 
@@ -310,22 +314,17 @@ function Updater.check(plugin, current_version)
         return
     end
 
-    UIManager:show(InfoMessage:new{
-        text = T(_("Update available\n\nv%1 → v%2\n\n%3"), current_version, release.version, release.description or ""),
-        dismiss_callback = function()
-            UIManager:show(ConfirmBox:new{
-                text = _("Download and install this update?"),
-                ok_text = _("Update"),
-                ok_callback = function()
-                    if Device.isEmulator() then
-                        UIManager:show(InfoMessage:new{
-                            text = _("Emulator detected.\nUpdates are not applied in the emulator."),
-                        })
-                        return
-                    end
-                    Updater._install(plugin_dir, release)
-                end,
-            })
+    UIManager:show(ConfirmBox:new{
+        text = T(_("VocabDeck v%1 is available.\n\nCurrent version: v%2\n\nDownload and install now?"), release.version, current_version),
+        ok_text = _("Update"),
+        ok_callback = function()
+            if Device.isEmulator() then
+                UIManager:show(InfoMessage:new{
+                    text = _("Emulator detected.\nUpdates are not applied in the emulator."),
+                })
+                return
+            end
+            Updater._install(plugin_dir, release)
         end,
     })
 end
@@ -343,7 +342,7 @@ function Updater._install(plugin_dir, release)
         local extract_dir = plugin_dir .. "_" .. release.version
 
         -- Show download progress
-        local status_msg = showMessage("Downloading update…")
+        local status_msg = showMessage("Downloading update…\n\nKOReader will ask to restart after the update is installed.")
 
         -- Step 1: Download the update zip (runs in subprocess)
         local completed, ok, err = Trapper:dismissableRunInSubprocess(function()
@@ -513,7 +512,7 @@ function Updater._install(plugin_dir, release)
 
         -- Step 5: Done — prompt restart
         UIManager:askForRestart(
-            T(_("VocabDeck updated to v%1.\n\nTo use the new version, the device must be restarted."),
+            T(_("VocabDeck updated to v%1.\n\nRestart KOReader to activate the new version."),
                 release.version)
         )
     end)

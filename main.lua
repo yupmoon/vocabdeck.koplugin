@@ -149,20 +149,6 @@ function VocabDeck:init()
         self.ui.menu:registerToMainMenu(self)
     end
 
-    -- Show release notes when version changed (post-update)
-    local last_version = self:readSetting("last_shown_version", "")
-    if last_version ~= PLUGIN_VERSION and PLUGIN_VERSION ~= "1.0.0" then
-        self:saveSetting("last_shown_version", PLUGIN_VERSION)
-        self.settings:flush()
-        local release_text = string.format(
-            _("VocabDeck updated to v%s!\n\nRestart KOReader to complete the update."),
-            PLUGIN_VERSION
-        )
-        UIManager:show(InfoMessage:new{
-            text = release_text,
-            timeout = 8,
-        })
-    end
     if CONFIGURATION then
         self.querier = Querier:new{ plugin = self }
     end
