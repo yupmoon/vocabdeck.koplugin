@@ -558,29 +558,33 @@ function Importer.showImportMenu(plugin)
     local screen = Device.screen
     UIManager:show(Menu:new{
         title = _("Import"),
-        item_table = {
-            {
-                text = _("Import from Vocabulary Builder"),
-                enabled_func = function()
-                    return plugin
-                        and plugin.getDocumentFilePath
-                        and plugin:getDocumentFilePath() ~= nil
-                end,
-                callback = function()
-                    Importer.showImportDialog(plugin)
-                end,
-            },
-            {
-                text = _("Import from Anki text"),
-                callback = function()
-                    Importer.showAnkiImportDialog(plugin)
-                end,
-            },
-        },
+        item_table = Importer.buildImportMenuItems(plugin),
         covers_fullscreen = true,
         width = math.floor(screen:getWidth() * 0.9),
         height = math.floor(screen:getHeight() * 0.7),
     })
+end
+
+function Importer.buildImportMenuItems(plugin)
+    return {
+        {
+            text = _("Import from Vocabulary Builder"),
+            enabled_func = function()
+                return plugin
+                    and plugin.getDocumentFilePath
+                    and plugin:getDocumentFilePath() ~= nil
+            end,
+            callback = function()
+                Importer.showImportDialog(plugin)
+            end,
+        },
+        {
+            text = _("Import from Anki text"),
+            callback = function()
+                Importer.showAnkiImportDialog(plugin)
+            end,
+        },
+    }
 end
 
 -- Load words from vocabbuilder restricted to a specific title_id (book).

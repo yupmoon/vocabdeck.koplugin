@@ -1104,20 +1104,9 @@ function DashboardScreen:openSettings()
     end
     local trailing_items = {
         {
-            text = _("Import from Vocabulary Builder"),
-            enabled_func = function()
-                return self.plugin
-                    and self.plugin.getDocumentFilePath
-                    and self.plugin:getDocumentFilePath() ~= nil
-            end,
-            callback = function()
-                Importer.showImportDialog(self.plugin)
-            end,
-        },
-        {
-            text = _("Import from Anki text"),
-            callback = function()
-                Importer.showAnkiImportDialog(self.plugin)
+            text = _("Import"),
+            sub_item_table_func = function()
+                return Importer.buildImportMenuItems(self.plugin)
             end,
         },
     }
