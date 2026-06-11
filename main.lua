@@ -8,6 +8,7 @@
 --   * Instantiating the AI querier from vocabdeck_configuration.lua.
 local _ = require("gettext")
 local DataStorage = require("datastorage")
+local Dispatcher = require("dispatcher")
 local InputContainer = require("ui/widget/container/inputcontainer")
 local InfoMessage = require("ui/widget/infomessage")
 local LuaSettings = require("luasettings")
@@ -16,6 +17,7 @@ local koutil = require("util")
 
 local DB = require("vocabdeck_db")
 local Bulk = require("vocabdeck_bulk")
+local Dashboard = require("vocabdeck_dashboard")
 local MenuBuilder = require("vocabdeck_menu")
 local Querier = require("vocabdeck_ai")
 local Stats = require("vocabdeck_stats")
@@ -131,6 +133,19 @@ function VocabDeck:_buildMenu()
     return MenuBuilder.build(self, CONFIG_ERROR, PLUGIN_VERSION)
 end
 
+function VocabDeck:onDispatcherRegisterActions()
+    Dispatcher:registerAction("vocabdeck_dashboard", {
+        category = "none",
+        event = "VocabDeckDashboard",
+        title = _("VocabDeck: Dashboard"),
+        general = true,
+    })
+end
+
+function VocabDeck:onVocabDeckDashboard()
+    Dashboard.show(self)
+end
+
 -- ── Lifecycle ────────────────────────────────────────────────────────────
 
 function VocabDeck:init()
@@ -148,6 +163,7 @@ function VocabDeck:init()
     if self.ui and self.ui.menu and self.ui.menu.registerToMainMenu then
         self.ui.menu:registerToMainMenu(self)
     end
+    self:onDispatcherRegisterActions()
 
     if CONFIGURATION then
         self.querier = Querier:new{ plugin = self }
