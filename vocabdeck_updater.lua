@@ -23,6 +23,10 @@ local T = ffiUtil.template
 local socket = require("socket")
 
 local Updater = {}
+local PRESERVED_LOCAL_FILES = {
+    "vocabdeck_apikeys.lua",
+    "vocabdeck_configuration.lua",
+}
 
 -- ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -104,6 +108,19 @@ local function moveFile(src, dest)
     return ffiUtil.execute(mv_bin, src, dest) == 0
 end
 
+local function copyPreservedLocalFiles(old_dir, new_dir)
+    for _, filename in ipairs(PRESERVED_LOCAL_FILES) do
+        local source = old_dir .. "/" .. filename
+        if lfs.attributes(source, "mode") == "file" then
+            local copy_err = ffiUtil.copyFile(source, new_dir .. "/" .. filename)
+            if copy_err then
+                return false, string.format("could not preserve %s: %s", filename, copy_err)
+            end
+        end
+    end
+    return true
+end
+
 --- Show an InfoMessage and force a repaint so it appears immediately.
 local function showMessage(text, timeout)
     local opts = {
@@ -137,11 +154,20 @@ local function parseReleaseInfo(json)
     end
     local version = json.tag_name:match("^v?(.+)$") or json.tag_name
     local zip_url
-    if json.zipball_url then
-        zip_url = json.zipball_url
-    elseif json.assets and json.assets[1] and json.assets[1].browser_download_url then
-        zip_url = json.assets[1].browser_download_url
-    else
+    -- Prefer the curated release package. GitHub's zipball is only a fallback
+    -- and may have a generated root directory or different archive metadata.
+    if type(json.assets) == "table" then
+        for _, asset in ipairs(json.assets) do
+            local name = type(asset.name) == "string" and asset.name:lower() or ""
+            if asset.browser_download_url
+                and (name:match("%.zip$") or asset.content_type == "application/zip") then
+                zip_url = asset.browser_download_url
+                break
+            end
+        end
+    end
+    zip_url = zip_url or json.zipball_url
+    if not zip_url then
         warn("No downloadable asset found in release")
         return nil
     end
@@ -188,6 +214,108 @@ local function verifyArchiveFile(archive_file)
         return false, "downloaded file is not a ZIP archive"
     end
     return true
+end
+
+local function prepareExtractDir(extract_dir)
+    if lfs.attributes(extract_dir) then
+        local removed, remove_err = ffiUtil.purgeDir(extract_dir)
+        if not removed then
+            return false, remove_err or "could not clear extraction directory"
+        end
+    end
+    local created, create_err = lfs.mkdir(extract_dir)
+    if not created and lfs.attributes(extract_dir, "mode") ~= "directory" then
+        return false, create_err or "could not create extraction directory"
+    end
+    return true
+end
+
+local function safeArchiveEntry(entry)
+    if not entry or type(entry.path) ~= "string" or entry.path == "" then
+        return nil, "archive contains an entry without a path"
+    end
+    if entry.mode ~= "file" and entry.mode ~= "directory" then
+        return nil, "archive contains an unsupported entry type"
+    end
+    local path = entry.path:gsub("\\", "/")
+    if path:find("\0", 1, true)
+        or path:sub(1, 1) == "/"
+        or path:match("^%a:/")
+        or ("/" .. path .. "/"):find("/../", 1, true) then
+        return nil, "archive contains an unsafe path"
+    end
+    return path
+end
+
+local function extractWithArchiver(archive_file, extract_dir)
+    local loaded, Archiver = pcall(require, "ffi/archiver")
+    if not loaded then
+        return false, "KOReader Archiver is unavailable: " .. tostring(Archiver)
+    end
+
+    local arc
+    local ran, extracted, extract_err, stop_fallback = pcall(function()
+        arc = Archiver.Reader:new()
+        if not arc:open(archive_file) then
+            return false, arc.err or "could not open archive"
+        end
+        for entry in arc:iterate() do
+            local entry_path, path_err = safeArchiveEntry(entry)
+            if not entry_path then
+                return false, path_err, true
+            end
+            if not arc:extractToPath(entry.path, extract_dir .. "/" .. entry_path) then
+                return false, arc.err or "could not extract archive entry"
+            end
+        end
+        if arc.err then
+            return false, arc.err
+        end
+        return true
+    end)
+    if arc then
+        pcall(arc.close, arc)
+    end
+    if not ran then
+        return false, tostring(extracted)
+    end
+    return extracted, extract_err, stop_fallback
+end
+
+local function extractArchive(archive_file, extract_dir)
+    local reasons = {}
+    local ready, ready_err = prepareExtractDir(extract_dir)
+    if not ready then return false, ready_err end
+
+    local extracted, extract_err, stop_fallback = extractWithArchiver(archive_file, extract_dir)
+    if extracted then return true end
+    if stop_fallback then return false, extract_err end
+    reasons[#reasons + 1] = extract_err or "KOReader Archiver failed"
+
+    -- Compatibility path for KOReader versions that still expose this API.
+    if type(Device.unpackArchive) == "function" then
+        ready, ready_err = prepareExtractDir(extract_dir)
+        if not ready then return false, ready_err end
+        local called, unpacked, unpack_err = pcall(
+            Device.unpackArchive, Device, archive_file, extract_dir, false
+        )
+        if called and unpacked then return true end
+        reasons[#reasons + 1] = called
+            and (unpack_err or "legacy archive extractor failed")
+            or tostring(unpacked)
+    end
+
+    -- Last resort for platforms that provide a command-line unzip utility.
+    ready, ready_err = prepareExtractDir(extract_dir)
+    if not ready then return false, ready_err end
+    local rc, exit_type, exit_code = os.execute(
+        string.format("unzip -oq %q -d %q", archive_file, extract_dir)
+    )
+    if rc == true or rc == 0 then return true end
+    reasons[#reasons + 1] = string.format(
+        "unzip failed (%s)", tostring(exit_code or exit_type or rc)
+    )
+    return false, table.concat(reasons, "; ")
 end
 
 -- ── Public API ──────────────────────────────────────────────────────────────
@@ -382,17 +510,9 @@ function Updater._install(plugin_dir, release)
         closeMessage(status_msg)
         status_msg = showMessage("Extracting update…")
 
-        -- Extraction runs in subprocess too (unzip via os.execute)
-        local completed2, extract_ok = Trapper:dismissableRunInSubprocess(function()
-            lfs.mkdir(extract_dir)
-            -- Try Device:unpackArchive first, fall back to unzip
-            local ok_unpack, err_unpack = Device:unpackArchive(archive_file, extract_dir, true)
-            if ok_unpack then
-                return true
-            end
-            -- Fallback: use os.execute unzip
-            local rc = os.execute(string.format("unzip -q %q -d %q", archive_file, extract_dir))
-            return rc == 0 or rc == true
+        -- Extraction runs in a subprocess so large archives do not block UI.
+        local completed2, extract_ok, extract_err = Trapper:dismissableRunInSubprocess(function()
+            return extractArchive(archive_file, extract_dir)
         end, status_msg)
 
         if not completed2 then
@@ -405,7 +525,8 @@ function Updater._install(plugin_dir, release)
         if not extract_ok then
             closeMessage(status_msg)
             UIManager:show(InfoMessage:new{
-                text = _("Failed to extract update."),
+                text = T(_("Failed to extract update.\n\n%1"),
+                    extract_err or _("Unknown error")),
             })
             ffiUtil.purgeDir(extract_dir)
             os.remove(archive_file)
@@ -484,7 +605,7 @@ function Updater._install(plugin_dir, release)
         closeMessage(status_msg)
         status_msg = showMessage("Applying update…")
 
-        local completed4, swapped = Trapper:dismissableRunInSubprocess(function()
+        local completed4, swapped, swap_err = Trapper:dismissableRunInSubprocess(function()
             local backup_dir = plugin_dir .. ".backup"
             if lfs.attributes(backup_dir) then
                 ffiUtil.purgeDir(backup_dir)
@@ -499,6 +620,14 @@ function Updater._install(plugin_dir, release)
                 moveFile(backup_dir, plugin_dir)
                 return false, "install failed"
             end
+            local preserved, preserve_err = copyPreservedLocalFiles(backup_dir, plugin_dir)
+            if not preserved then
+                ffiUtil.purgeDir(plugin_dir)
+                if not moveFile(backup_dir, plugin_dir) then
+                    preserve_err = preserve_err .. "; restoring the old version failed"
+                end
+                return false, preserve_err
+            end
             -- Clean up backup and archive
             ffiUtil.purgeDir(backup_dir)
             os.remove(archive_file)
@@ -509,7 +638,8 @@ function Updater._install(plugin_dir, release)
 
         if not completed4 or not swapped then
             UIManager:show(InfoMessage:new{
-                text = _("Failed to install the update.\nOld version has been restored."),
+                text = T(_("Failed to install update.\n\n%1\n\nOld version has been restored."),
+                    swap_err or _("Unknown error")),
             })
             return
         end
