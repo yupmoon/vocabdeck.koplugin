@@ -66,9 +66,9 @@ local function shortText(text, max_len)
 end
 
 local function getRequireEnriched(plugin)
-    if not plugin then return true end
+    if not plugin then return false end
     local value = plugin:readSetting("require_enriched_for_study")
-    if value == nil then return true end
+    if value == nil then return false end
     return value and true or false
 end
 

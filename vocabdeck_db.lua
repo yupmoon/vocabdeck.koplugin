@@ -1802,7 +1802,7 @@ function DB.getDashboardSummary(options)
     local deck_new_limits = options.deck_new_limits or {}
     local deck_review_limits = options.deck_review_limits or {}
     local require_enriched = options.require_enriched
-    if require_enriched == nil then require_enriched = true end
+    if require_enriched == nil then require_enriched = false end
 
     local function summaryNumber(value)
         return tonumber(value) or 0

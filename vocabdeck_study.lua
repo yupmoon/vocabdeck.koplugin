@@ -555,9 +555,9 @@ end
 
 function StudyScreen:getRequireEnriched()
     local plugin = self.plugin
-    if not plugin then return true end
+    if not plugin then return false end
     local v = plugin:readSetting("require_enriched_for_study")
-    if v == nil then return true end
+    if v == nil then return false end
     return v and true or false
 end
 

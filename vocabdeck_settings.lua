@@ -1008,14 +1008,14 @@ function Settings.buildMenuItems(plugin, default_touchmenu_instance)
         {
             text = _("Study only enriched cards"),
             text_func = function()
-                return boolRowValue(plugin, "require_enriched_for_study", true, _("Study only enriched cards"))
+                return boolRowValue(plugin, "require_enriched_for_study", false, _("Study only enriched cards"))
             end,
             checked_func = function()
-                return readBool(plugin, "require_enriched_for_study", true)
+                return readBool(plugin, "require_enriched_for_study", false)
             end,
             keep_menu_open = true,
             callback = function(touchmenu_instance)
-                local current = readBool(plugin, "require_enriched_for_study", true)
+                local current = readBool(plugin, "require_enriched_for_study", false)
                 plugin.settings:saveSetting("require_enriched_for_study", not current)
                 plugin.settings:flush()
                 refreshMenu(touchmenu_instance)

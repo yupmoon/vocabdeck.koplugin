@@ -89,6 +89,23 @@ local function ensureProvider(plugin)
     return true
 end
 
+-- Avoid KOReader's DNS-backed isOnline() check when the Wi-Fi radio is off.
+-- In that state we already know network access is unavailable, so go straight
+-- to the configured Wi-Fi prompt/enable action. Once Wi-Fi is on, retain
+-- runWhenOnline() so KOReader still verifies Internet access as usual.
+function AIRunner.runWhenOnline(callback)
+    if type(callback) ~= "function" then return end
+
+    local NetworkMgr = require("ui/network/manager")
+    if type(NetworkMgr.isWifiOn) == "function"
+        and not NetworkMgr:isWifiOn()
+        and type(NetworkMgr.beforeWifiAction) == "function" then
+        NetworkMgr:beforeWifiAction(callback)
+        return
+    end
+    NetworkMgr:runWhenOnline(callback)
+end
+
 -- Run an AI-fetch workflow with the common boilerplate.
 -- @param plugin  VocabDeck plugin instance
 -- @param opts    table with:
@@ -108,8 +125,7 @@ function AIRunner.run(plugin, opts)
         return
     end
 
-    local NetworkMgr = require("ui/network/manager")
-    NetworkMgr:runWhenOnline(function()
+    AIRunner.runWhenOnline(function()
         Trapper:wrap(function()
             local cancelled = false
             local trap_text = opts.message

@@ -50,9 +50,9 @@ local function readExtraReview(plugin)
 end
 
 local function requireEnrichedForStudy(plugin)
-    if not plugin or not plugin.readSetting then return true end
+    if not plugin or not plugin.readSetting then return false end
     local value = plugin:readSetting("require_enriched_for_study")
-    if value == nil then return true end
+    if value == nil then return false end
     return value and true or false
 end
 

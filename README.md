@@ -42,7 +42,9 @@ VocabDeck is inspired by and derived from
 2. Select a word or phrase.
 3. Tap **Add to VocabDeck** to save the current lookup or selection.
 4. Tap **Define (VocabDeck)** if you want VocabDeck to fetch a definition first.
-5. Open **Tools > VocabDeck > Study** when you want to review.
+5. Open **Tools > VocabDeck**, then tap a language entry such as
+   **English [3]** to review its due cards. You can also open **Dashboard** and
+   tap a language there.
 
 For ordinary dictionary lookups, **Add to VocabDeck** saves the word with the
 available definition and reading context. For phrases, or words without a good
@@ -53,7 +55,10 @@ meaning and metadata.
 
 VocabDeck appears in KOReader's **Tools** menu.
 
-- **Study**: open the review screen.
+- **Dashboard**: see deck progress and start studying by tapping a language.
+- **Language entries** such as **English [3]**: open the review screen for that
+  language. The number in brackets is the number of cards currently available
+  to study.
 - **Stats**: show study progress, streaks, due cards, and deck health.
 - **All cards**: browse every saved card.
 - **Cards for this book**: browse cards from the current book.
@@ -177,6 +182,10 @@ then grade your recall:
 - **Good**: remembered normally.
 - **Easy**: remembered easily.
 - **Delete**: remove the card.
+
+AI enrichment is optional for study. New and manually defined cards are
+included by default. To restrict review to enriched cards, enable
+**Tools > VocabDeck > Settings > Study only enriched cards**.
 
 The schedule is handled with FSRS-style review state. The goal is to keep the
 review flow simple on e-ink while still giving better spacing than a fixed

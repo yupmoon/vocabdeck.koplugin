@@ -218,7 +218,7 @@ function StudyEntry.install(VocabDeck)
         end
 
         local require_enriched = plugin:readSetting("require_enriched_for_study")
-        if require_enriched == nil then require_enriched = true end
+        if require_enriched == nil then require_enriched = false end
         local daily_new_limit = tonumber(plugin:readSetting("daily_new_cards_limit", 20)) or 20
         local daily_review_limit = tonumber(plugin:readSetting("daily_review_cards_limit", 200)) or 200
 

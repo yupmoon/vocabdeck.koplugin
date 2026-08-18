@@ -34,10 +34,10 @@ function StatsData.collect(plugin)
             book_id = found_book_id
         end
     end
-    local require_enriched = true
+    local require_enriched = false
     if plugin then
         local v = plugin:readSetting("require_enriched_for_study")
-        require_enriched = v == nil and true or not not v
+        require_enriched = v ~= nil and not not v
     end
 
     local ok_languages, languages = pcall(DB.getSourceLanguageSummaries, require_enriched)

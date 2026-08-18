@@ -40,8 +40,7 @@ function Bulk.fetchMissing(plugin, book_id, on_finished)
                     if on_finished then on_finished(0, 0) end
                     return
                 end
-                local NetworkMgr = require("ui/network/manager")
-                NetworkMgr:runWhenOnline(function()
+                AIRunner.runWhenOnline(function()
                     Trapper:wrap(function()
                         Enrich.bulkEnrich(plugin, refetch_cards, on_finished)
                     end)
@@ -51,8 +50,7 @@ function Bulk.fetchMissing(plugin, book_id, on_finished)
         return
     end
 
-    local NetworkMgr = require("ui/network/manager")
-    NetworkMgr:runWhenOnline(function()
+    AIRunner.runWhenOnline(function()
         Trapper:wrap(function()
             Enrich.bulkEnrich(plugin, cards, on_finished)
         end)
