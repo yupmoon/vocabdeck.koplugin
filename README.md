@@ -35,6 +35,28 @@ VocabDeck is inspired by and derived from
 3. Restart KOReader.
 4. Open KOReader's top menu, go to **Tools**, and open **VocabDeck**.
 
+### KOReader 2026.07 update note
+
+KOReader 2026.07 changed the dictionary-button and archive-extraction APIs used
+by earlier VocabDeck releases. VocabDeck 1.2.4 supports the new KOReader
+2026.07 APIs while retaining compatibility with KOReader 2026.03.
+
+If you are already running KOReader 2026.07 with a VocabDeck version older
+than 1.2.3, **Check for updates cannot repair that installation** because the
+installed updater still calls the archive API removed by KOReader. Install
+VocabDeck 1.2.4 manually once, then restart KOReader. Future updates can use
+**Check for updates** normally.
+
+Before manually replacing the plugin folder, keep copies of
+`vocabdeck_apikeys.lua` and `vocabdeck_configuration.lua` if you use them. Copy
+the new files into `vocabdeck.koplugin`, restore those two private files if the
+folder was replaced, and restart KOReader. Cards and study data are stored
+separately and are not part of the release ZIP.
+
+Users staying on KOReader 2026.03 do not need this one-time recovery. Existing
+VocabDeck 1.2.3 installations already contain the repaired updater and can
+update to 1.2.4 normally.
+
 
 ## Quick Start
 

@@ -29,7 +29,7 @@ local Grammar = require("vocabdeck_grammar")
 local StudyEntry = require("vocabdeck_study_entry")
 
 local SETTINGS_FILE = DataStorage:getSettingsDir() .. "/vocabdeck.lua"
-local PLUGIN_VERSION = "1.2.3"
+local PLUGIN_VERSION = "1.2.4"
 local DICT_BUTTON_ROW_GROUP = "vocabdeck_actions"
 
 local CONFIGURATION, CONFIG_ERROR = Config.load()
