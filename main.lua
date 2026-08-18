@@ -29,7 +29,8 @@ local Grammar = require("vocabdeck_grammar")
 local StudyEntry = require("vocabdeck_study_entry")
 
 local SETTINGS_FILE = DataStorage:getSettingsDir() .. "/vocabdeck.lua"
-local PLUGIN_VERSION = "1.2.1"
+local PLUGIN_VERSION = "1.2.2"
+local DICT_BUTTON_ROW_GROUP = "vocabdeck_actions"
 
 local CONFIGURATION, CONFIG_ERROR = Config.load()
 
@@ -133,6 +134,56 @@ function VocabDeck:_buildMenu()
     return MenuBuilder.build(self, CONFIG_ERROR, PLUGIN_VERSION)
 end
 
+local function buildDictionaryButtonSpecs(plugin)
+    return {
+        {
+            id = "vocabdeck_add",
+            text = _("Add to VD"),
+            font_bold = true,
+            conditional = true,
+            row_group = DICT_BUTTON_ROW_GROUP,
+            callback = function(dict_popup)
+                plugin:addFromDictionary(dict_popup)
+            end,
+        },
+        {
+            id = "vocabdeck_add_ai",
+            text = _("VD +AI"),
+            conditional = true,
+            row_group = DICT_BUTTON_ROW_GROUP,
+            callback = function(dict_popup)
+                plugin:addWithAIFromDictionary(dict_popup)
+            end,
+        },
+        {
+            id = "vocabdeck_define",
+            text = _("Define (VD)"),
+            conditional = true,
+            row_group = DICT_BUTTON_ROW_GROUP,
+            callback = function(dict_popup)
+                plugin:defineFromDictionary(dict_popup)
+            end,
+        },
+    }
+end
+
+-- KOReader 2026.07+ uses a registry instead of broadcasting
+-- DictButtonsReady while constructing each dictionary popup.
+function VocabDeck:registerDictionaryButtons()
+    local dictionary = self.ui and self.ui.dictionary
+    if not dictionary or type(dictionary.addToDictButtons) ~= "function" then
+        return false
+    end
+    if self._dict_buttons_registered_on == dictionary then
+        return true
+    end
+    for _, spec in ipairs(buildDictionaryButtonSpecs(self)) do
+        dictionary:addToDictButtons(spec)
+    end
+    self._dict_buttons_registered_on = dictionary
+    return true
+end
+
 function VocabDeck:onDispatcherRegisterActions()
     Dispatcher:registerAction("vocabdeck_dashboard", {
         category = "none",
@@ -163,6 +214,7 @@ function VocabDeck:init()
     if self.ui and self.ui.menu and self.ui.menu.registerToMainMenu then
         self.ui.menu:registerToMainMenu(self)
     end
+    self:registerDictionaryButtons()
     self:onDispatcherRegisterActions()
 
     if CONFIGURATION then
@@ -172,6 +224,10 @@ end
 
 function VocabDeck:onReaderReady()
     if not self.ui then return end
+
+    -- Normally registered during init; retry here in case ReaderDictionary was
+    -- not available yet. Re-registration on the same instance is a no-op.
+    self:registerDictionaryButtons()
 
     -- Highlight menu entry.
     if self.ui.highlight and self.ui.highlight.addToHighlightDialog then
@@ -210,11 +266,12 @@ function VocabDeck:onReaderReady()
     end
 end
 
--- Dictionary popup integration. The DictButtonsReady event is fired by
--- dictquicklookup.lua as it assembles its action rows. `dict_buttons` is a
--- 2-D array (rows of buttons), so we inject a new row holding the VocabDeck
--- button just below the built-in row.
+-- Legacy dictionary popup integration for KOReader versions predating the
+-- addToDictButtons registry. `dict_buttons` is a 2-D array (rows of buttons),
+-- so we inject a VocabDeck row just below the built-in row.
 function VocabDeck:onDictButtonsReady(dict_popup, dict_buttons)
+    local dictionary = self.ui and self.ui.dictionary
+    if dictionary and self._dict_buttons_registered_on == dictionary then return end
     if not dict_popup or type(dict_buttons) ~= "table" then return end
     local row = {
         {
