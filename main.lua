@@ -31,6 +31,9 @@ local StudyEntry = require("vocabdeck_study_entry")
 local SETTINGS_FILE = DataStorage:getSettingsDir() .. "/vocabdeck.lua"
 local PLUGIN_VERSION = "1.2.4"
 local DICT_BUTTON_ROW_GROUP = "vocabdeck_actions"
+-- Every id either button set in buildDictionaryButtonSpecs() can register,
+-- across both the "Unified dictionary button" setting's states.
+local ALL_DICT_BUTTON_IDS = { "vocabdeck_definition", "vocabdeck_add", "vocabdeck_add_ai", "vocabdeck_define" }
 
 local CONFIGURATION, CONFIG_ERROR = Config.load()
 
@@ -207,6 +210,26 @@ function VocabDeck:registerDictionaryButtons()
     end
     self._dict_buttons_registered_on = dictionary
     return true
+end
+
+-- addToDictButtons only ever adds or overwrites an entry by id
+-- (readerdictionary.lua: self._dict_buttons[spec.id] = spec, read fresh on
+-- every popup by dictquicklookup.lua's populatePluginButtons) -- there's no
+-- matching remove. So flipping "Unified dictionary button" needs the
+-- previous mode's now-stale ids cleared out of that table directly, or they
+-- just pile up alongside the new ones until the next restart.
+function VocabDeck:refreshDictionaryButtons()
+    local dictionary = self.ui and self.ui.dictionary
+    if not dictionary or type(dictionary.addToDictButtons) ~= "function" then
+        return
+    end
+    if type(dictionary._dict_buttons) == "table" then
+        for _, id in ipairs(ALL_DICT_BUTTON_IDS) do
+            dictionary._dict_buttons[id] = nil
+        end
+    end
+    self._dict_buttons_registered_on = nil
+    self:registerDictionaryButtons()
 end
 
 function VocabDeck:onDispatcherRegisterActions()

@@ -834,6 +834,9 @@ function Settings.buildMenuItems(plugin, default_touchmenu_instance)
                 local current = readBool(plugin, "unified_dict_button", true)
                 plugin.settings:saveSetting("unified_dict_button", not current)
                 plugin.settings:flush()
+                if plugin.refreshDictionaryButtons then
+                    plugin:refreshDictionaryButtons()
+                end
                 refreshMenu(touchmenu_instance)
             end,
         },
