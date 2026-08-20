@@ -8,6 +8,7 @@ local AIRunner = require("vocabdeck_ai_runner")
 local DB = require("vocabdeck_db")
 local Capture = require("vocabdeck_capture")
 local Enrich = require("vocabdeck_enrich")
+local Format = require("vocabdeck_card_format")
 
 local Define = {}
 
@@ -101,17 +102,11 @@ function Define.install(VocabDeck)
     function VocabDeck:_showDefineResult(params, result)
         self:_applyDefineResult(params, result)
 
-        local header = params.phrase or ""
-        local meta = {}
-        if params.word_type ~= "" then meta[#meta + 1] = params.word_type end
-        if params.pronunciation ~= "" then meta[#meta + 1] = params.pronunciation end
-        if #meta > 0 then header = header .. "\n" .. table.concat(meta, " · ") end
-
-        local details = { header }
-        if params.meaning ~= "" then details[#details + 1] = params.meaning end
-        if params.synonym ~= "" then
-            details[#details + 1] = string.format(_("Synonyms: %s"), params.synonym)
-        end
+        -- Same section Card Details shows for a saved card (headword,
+        -- type/pronunciation, meaning, synonyms) via
+        -- Format.buildDefinitionSection — nothing else is known yet since the
+        -- card isn't saved.
+        local text = table.concat(Format.buildDefinitionSection(params), "\n")
 
         local viewer
         local buttons = { {
@@ -131,7 +126,7 @@ function Define.install(VocabDeck)
         } }
         viewer = TextViewer:new{
             title = _("Define (VocabDeck)"),
-            text = table.concat(details, "\n\n"),
+            text = text,
             buttons_table = buttons,
             add_default_buttons = false,
         }

@@ -42,29 +42,38 @@ function Format.buildCardSubtitle(card)
     return _("No meaning yet")
 end
 
-function Format.buildPreviewText(card)
-    local parts = { card.phrase or "" }
+-- The part of a card preview that's known before saving: headword, word
+-- type/pronunciation, meaning, and synonyms. Shared between the Define
+-- preview (nothing saved yet) and Card Details (which appends its own
+-- additional metadata below via buildPreviewText).
+function Format.buildDefinitionSection(fields)
+    local parts = { fields.phrase or "" }
     local meta = {}
-    if (card.leech or 0) ~= 0 then
+    if (fields.leech or 0) ~= 0 then
         meta[#meta + 1] = _("Leech")
     end
-    if card.word_type and card.word_type ~= "" then
-        meta[#meta + 1] = card.word_type
+    if fields.word_type and fields.word_type ~= "" then
+        meta[#meta + 1] = fields.word_type
     end
-    if card.pronunciation and card.pronunciation ~= "" then
-        meta[#meta + 1] = card.pronunciation
+    if fields.pronunciation and fields.pronunciation ~= "" then
+        meta[#meta + 1] = fields.pronunciation
     end
     if #meta > 0 then
         parts[#parts + 1] = table.concat(meta, " · ")
     end
-    if card.meaning ~= "" then
+    if fields.meaning ~= "" then
         parts[#parts + 1] = ""
-        parts[#parts + 1] = card.meaning
+        parts[#parts + 1] = fields.meaning
     end
-    if card.synonym and card.synonym ~= "" then
+    if fields.synonym and fields.synonym ~= "" then
         parts[#parts + 1] = ""
-        parts[#parts + 1] = string.format(_("Synonyms: %s"), card.synonym)
+        parts[#parts + 1] = string.format(_("Synonyms: %s"), fields.synonym)
     end
+    return parts
+end
+
+function Format.buildPreviewText(card)
+    local parts = Format.buildDefinitionSection(card)
     local context = card.sentence ~= "" and card.sentence or card.display_context
     if context and context ~= "" then
         parts[#parts + 1] = ""
