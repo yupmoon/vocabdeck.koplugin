@@ -13,7 +13,7 @@ VocabDeck is inspired by and derived from
 
 ## Features
 
-- **Save words as you read** — tap **VocabDeck Definition** in the dictionary popup, or use the highlight menu. Online, it fetches an AI meaning, pronunciation, word type, and more before saving; offline, it saves the current lookup or selection directly. Each card keeps the word, its sentence, surrounding context, book title, and when you added it. Prefer separate buttons for each action instead? Turn off **Settings > Unified dictionary button** to get back **Add to VocabDeck**, **Add to VocabDeck (Enriched)**, and **Define (VocabDeck)**.
+- **Save words as you read** — tap **Add to VD**, **VD +AI**, or **Define (VD)** in the dictionary popup, or use the highlight menu. To use one combined **VD Definition** button instead, enable **Settings > Unified dictionary button**. Online, it fetches an AI meaning, pronunciation, word type, and more before saving; offline, it saves the current lookup or selection directly. Each card keeps the word, its sentence, surrounding context, book title, and when you added it.
 - **Add cards manually** — open the main menu and pick **Add new card** to type in a word or phrase yourself.
 - **Browse and manage everything** — open **All cards** or **Cards for this book**. Tap any row to view details, edit fields, refetch AI data, mark as known, check memory stats, or delete.
 - **Search and filter** — search by text, filter by word type or source language, or show only flagged cards. Sort by any field and switch to quick deletion mode when you need to clean up.
@@ -61,17 +61,16 @@ update to 1.2.4 normally.
 
 1. Open a book in KOReader.
 2. Select a word or phrase.
-3. Tap **VocabDeck Definition** in the dictionary popup. Online, this fetches
-   a definition first; offline, it saves the current lookup or selection
-   directly.
+3. Tap **Add to VD** in the dictionary popup. Use **VD +AI** or **Define (VD)**
+   when you want an AI-assisted action instead.
 4. Open **Tools > VocabDeck**, then tap a language entry such as
    **English [3]** to review its due cards. You can also open **Dashboard** and
    tap a language there.
 
-For ordinary dictionary lookups, **Add to VocabDeck** saves the word with the
+For ordinary dictionary lookups, **Add to VD** saves the word with the
 available definition and reading context. For phrases, or words without a good
-dictionary result, **Define (VocabDeck)** can create a card with AI-generated
-meaning and metadata.
+dictionary result, **Define (VD)** can create a card with AI-generated meaning
+and metadata.
 
 ## Main Menu
 

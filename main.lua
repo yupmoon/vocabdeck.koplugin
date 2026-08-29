@@ -159,11 +159,11 @@ local function vocabDeckDefinitionFromDictionary(plugin, dict_popup)
 end
 
 local function buildDictionaryButtonSpecs(plugin)
-    if plugin:readSetting("unified_dict_button", true) then
+    if plugin:readSetting("unified_dict_button", false) then
         return {
             {
                 id = "vocabdeck_definition",
-                text = _("VocabDeck Definition"),
+                text = _("VD Definition"),
                 font_bold = true,
                 conditional = true,
                 row_group = DICT_BUTTON_ROW_GROUP,
