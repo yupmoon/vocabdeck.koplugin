@@ -822,6 +822,25 @@ function Settings.buildMenuItems(plugin, default_touchmenu_instance)
             end,
         },
         {
+            text = _("Unified dictionary button"),
+            text_func = function()
+                return boolRowValue(plugin, "unified_dict_button", false, _("Unified dictionary button"))
+            end,
+            checked_func = function()
+                return readBool(plugin, "unified_dict_button", false)
+            end,
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                local current = readBool(plugin, "unified_dict_button", false)
+                plugin.settings:saveSetting("unified_dict_button", not current)
+                plugin.settings:flush()
+                if plugin.refreshDictionaryButtons then
+                    plugin:refreshDictionaryButtons()
+                end
+                refreshMenu(touchmenu_instance)
+            end,
+        },
+        {
             text = _("Grammar helper"),
             text_func = function()
                 return boolRowValue(plugin, "grammar_helper_enabled", false, _("Grammar helper"))
