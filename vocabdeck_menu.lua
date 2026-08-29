@@ -128,7 +128,7 @@ function Menu.build(plugin, config_error, plugin_version)
     items[#items + 1] = {
         text = _("Check for updates"),
         callback = function()
-            Updater.check(plugin, plugin_version)
+            Updater.check(plugin, plugin_version, true)
         end,
     }
     items[#items + 1] = {

@@ -320,7 +320,7 @@ end
 
 -- ── Public API ──────────────────────────────────────────────────────────────
 
-local CHECK_INTERVAL = 3600  -- seconds between network checks (1 hour)
+local CHECK_INTERVAL = 3600  -- cache lifetime for explicit non-forced checks
 local GS_KEY_TIME  = "vocabdeck_last_update_check"
 local GS_KEY_AVAIL = "vocabdeck_update_available"
 local GS_KEY_VER   = "vocabdeck_latest_version"
@@ -332,10 +332,12 @@ local function getGS()
     return (ok and gs) or nil
 end
 
---- Check for updates. Caches result for 1 hour so repeated taps don't hit
---- the network. Shows dialogs directly — no Trapper coroutine needed
---- for the check (blocking HTTP is fine for user-initiated actions).
-function Updater.check(plugin, current_version)
+--- Check for updates. Non-forced callers may reuse the one-hour cache, while
+--- the user-triggered menu action passes force_refresh=true so every tap gets
+--- the current release from the server.
+function Updater.check(plugin, current_version, force_refresh)
+    if force_refresh == nil then force_refresh = true end
+
     local plugin_dir = getPluginDir()
     if not plugin_dir then
         UIManager:show(InfoMessage:new{
@@ -363,8 +365,8 @@ function Updater.check(plugin, current_version)
     local last = gs and gs:readSetting(GS_KEY_TIME) or 0
     local last_num = type(last) == "number" and last or 0
 
-    -- Return cached result if checked recently
-    if (now - last_num) < CHECK_INTERVAL and gs then
+    -- Return a recent cached result only for non-interactive/background calls.
+    if not force_refresh and (now - last_num) < CHECK_INTERVAL and gs then
         local cached_avail = gs:readSetting(GS_KEY_AVAIL) == true
         local cached_ver   = gs:readSetting(GS_KEY_VER) or ""
         local cached_zip   = gs:readSetting(GS_KEY_ZIP) or ""

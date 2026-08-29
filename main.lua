@@ -31,6 +31,15 @@ local StudyEntry = require("vocabdeck_study_entry")
 local SETTINGS_FILE = DataStorage:getSettingsDir() .. "/vocabdeck.lua"
 local PLUGIN_VERSION = "1.2.4"
 local DICT_BUTTON_ROW_GROUP = "vocabdeck_actions"
+local DICT_BUTTON_IDS = {
+    "vocabdeck_add",
+    "vocabdeck_add_ai",
+    "vocabdeck_define",
+}
+local DICT_BUTTON_ID_SET = {}
+for _, id in ipairs(DICT_BUTTON_IDS) do
+    DICT_BUTTON_ID_SET[id] = true
+end
 
 local CONFIGURATION, CONFIG_ERROR = Config.load()
 
@@ -167,6 +176,77 @@ local function buildDictionaryButtonSpecs(plugin)
     }
 end
 
+-- Normalize the final button table as a compatibility guard. KOReader 2026.07
+-- normally honors row_group while building its transient rows, but some builds
+-- still return each registered action as a separate row. Working on the final
+-- button objects makes the intended three-column row explicit in either case.
+local function groupDictionaryButtons(button_rows)
+    if type(button_rows) ~= "table" then return end
+
+    local rebuilt_rows = {}
+    local grouped_buttons = {}
+    local insert_index
+
+    for _, row in ipairs(button_rows) do
+        if type(row) == "table" then
+            local remaining_buttons = {}
+            local found_vocabdeck_button = false
+            for _, button in ipairs(row) do
+                local id = type(button) == "table" and button.id or button
+                if DICT_BUTTON_ID_SET[id] then
+                    grouped_buttons[id] = grouped_buttons[id] or button
+                    found_vocabdeck_button = true
+                else
+                    remaining_buttons[#remaining_buttons + 1] = button
+                end
+            end
+            if found_vocabdeck_button and not insert_index then
+                insert_index = #rebuilt_rows + 1
+            end
+            if #remaining_buttons > 0 then
+                rebuilt_rows[#rebuilt_rows + 1] = remaining_buttons
+            end
+        else
+            rebuilt_rows[#rebuilt_rows + 1] = row
+        end
+    end
+
+    local grouped_row = {}
+    for _, id in ipairs(DICT_BUTTON_IDS) do
+        if grouped_buttons[id] then
+            grouped_row[#grouped_row + 1] = grouped_buttons[id]
+        end
+    end
+    if #grouped_row < 2 then return end
+
+    table.insert(rebuilt_rows, math.min(insert_index, #rebuilt_rows + 1), grouped_row)
+    for i = #button_rows, 1, -1 do
+        button_rows[i] = nil
+    end
+    for i, row in ipairs(rebuilt_rows) do
+        button_rows[i] = row
+    end
+end
+
+local function installDictionaryButtonRowGuard()
+    local loaded, DictQuickLookup = pcall(require, "ui/widget/dictquicklookup")
+    if not loaded or type(DictQuickLookup.buildButtonLayout) ~= "function" then
+        return false
+    end
+    if DictQuickLookup._vocabdeck_button_row_guard then
+        return true
+    end
+
+    local original_build_button_layout = DictQuickLookup.buildButtonLayout
+    DictQuickLookup.buildButtonLayout = function(dict_popup, ...)
+        local button_rows = original_build_button_layout(dict_popup, ...)
+        groupDictionaryButtons(button_rows)
+        return button_rows
+    end
+    DictQuickLookup._vocabdeck_button_row_guard = true
+    return true
+end
+
 -- KOReader 2026.07+ uses a registry instead of broadcasting
 -- DictButtonsReady while constructing each dictionary popup.
 function VocabDeck:registerDictionaryButtons()
@@ -174,6 +254,7 @@ function VocabDeck:registerDictionaryButtons()
     if not dictionary or type(dictionary.addToDictButtons) ~= "function" then
         return false
     end
+    installDictionaryButtonRowGuard()
     if self._dict_buttons_registered_on == dictionary then
         return true
     end
