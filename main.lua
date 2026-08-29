@@ -257,22 +257,30 @@ local function groupDictionaryButtons(button_rows)
     end
 end
 
+local row_guard_target
+local row_guard_wrapper
+
 local function installDictionaryButtonRowGuard()
     local loaded, DictQuickLookup = pcall(require, "ui/widget/dictquicklookup")
     if not loaded or type(DictQuickLookup.buildButtonLayout) ~= "function" then
         return false
     end
-    if DictQuickLookup._vocabdeck_button_row_guard then
+
+    -- Zen UI may replace buildButtonLayout after VocabDeck has loaded. Keep
+    -- the actual wrapper reference so a later onReaderReady can re-wrap it.
+    if DictQuickLookup == row_guard_target and DictQuickLookup.buildButtonLayout == row_guard_wrapper then
         return true
     end
 
     local original_build_button_layout = DictQuickLookup.buildButtonLayout
-    DictQuickLookup.buildButtonLayout = function(dict_popup, ...)
+    local wrapper = function(dict_popup, ...)
         local button_rows = original_build_button_layout(dict_popup, ...)
         groupDictionaryButtons(button_rows)
         return button_rows
     end
-    DictQuickLookup._vocabdeck_button_row_guard = true
+    DictQuickLookup.buildButtonLayout = wrapper
+    row_guard_target = DictQuickLookup
+    row_guard_wrapper = wrapper
     return true
 end
 
@@ -283,7 +291,6 @@ function VocabDeck:registerDictionaryButtons()
     if not dictionary or type(dictionary.addToDictButtons) ~= "function" then
         return false
     end
-    installDictionaryButtonRowGuard()
     if self._dict_buttons_registered_on == dictionary then
         return true
     end
@@ -358,6 +365,9 @@ function VocabDeck:onReaderReady()
     -- Normally registered during init; retry here in case ReaderDictionary was
     -- not available yet. Re-registration on the same instance is a no-op.
     self:registerDictionaryButtons()
+    -- Install after Zen UI has had a chance to replace the layout function.
+    -- The wrapper reference also lets this re-wrap a later Zen replacement.
+    installDictionaryButtonRowGuard()
 
     -- Highlight menu entry.
     if self.ui.highlight and self.ui.highlight.addToHighlightDialog then
