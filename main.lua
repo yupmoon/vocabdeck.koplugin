@@ -31,6 +31,7 @@ local StudyEntry = require("vocabdeck_study_entry")
 local SETTINGS_FILE = DataStorage:getSettingsDir() .. "/vocabdeck.lua"
 local PLUGIN_VERSION = "1.2.4"
 local DICT_BUTTON_ROW_GROUP = "vocabdeck_actions"
+-- IDs used by the row guard for the legacy three-button mode.
 local DICT_BUTTON_IDS = {
     "vocabdeck_add",
     "vocabdeck_add_ai",
@@ -40,6 +41,9 @@ local DICT_BUTTON_ID_SET = {}
 for _, id in ipairs(DICT_BUTTON_IDS) do
     DICT_BUTTON_ID_SET[id] = true
 end
+
+-- IDs used by either dictionary-button mode; cleared before re-registration.
+local ALL_DICT_BUTTON_IDS = { "vocabdeck_definition", "vocabdeck_add", "vocabdeck_add_ai", "vocabdeck_define" }
 
 local CONFIGURATION, CONFIG_ERROR = Config.load()
 
@@ -143,7 +147,32 @@ function VocabDeck:_buildMenu()
     return MenuBuilder.build(self, CONFIG_ERROR, PLUGIN_VERSION)
 end
 
+-- Online, behave like "Define (VD)" (fetch an AI definition first); offline,
+-- fall back to the plain "Add to VD" flow instead of attempting AI at all.
+local function vocabDeckDefinitionFromDictionary(plugin, dict_popup)
+    local NetworkMgr = require("ui/network/manager")
+    if type(NetworkMgr.isWifiOn) == "function" and not NetworkMgr:isWifiOn() then
+        plugin:addFromDictionary(dict_popup)
+    else
+        plugin:defineFromDictionary(dict_popup)
+    end
+end
+
 local function buildDictionaryButtonSpecs(plugin)
+    if plugin:readSetting("unified_dict_button", true) then
+        return {
+            {
+                id = "vocabdeck_definition",
+                text = _("VocabDeck Definition"),
+                font_bold = true,
+                conditional = true,
+                row_group = DICT_BUTTON_ROW_GROUP,
+                callback = function(dict_popup)
+                    vocabDeckDefinitionFromDictionary(plugin, dict_popup)
+                end,
+            },
+        }
+    end
     return {
         {
             id = "vocabdeck_add",
@@ -265,6 +294,26 @@ function VocabDeck:registerDictionaryButtons()
     return true
 end
 
+-- addToDictButtons only ever adds or overwrites an entry by id
+-- (readerdictionary.lua: self._dict_buttons[spec.id] = spec, read fresh on
+-- every popup by dictquicklookup.lua's populatePluginButtons) -- there's no
+-- matching remove. So flipping "Unified dictionary button" needs the
+-- previous mode's now-stale ids cleared out of that table directly, or they
+-- just pile up alongside the new ones until the next restart.
+function VocabDeck:refreshDictionaryButtons()
+    local dictionary = self.ui and self.ui.dictionary
+    if not dictionary or type(dictionary.addToDictButtons) ~= "function" then
+        return
+    end
+    if type(dictionary._dict_buttons) == "table" then
+        for _, id in ipairs(ALL_DICT_BUTTON_IDS) do
+            dictionary._dict_buttons[id] = nil
+        end
+    end
+    self._dict_buttons_registered_on = nil
+    self:registerDictionaryButtons()
+end
+
 function VocabDeck:onDispatcherRegisterActions()
     Dispatcher:registerAction("vocabdeck_dashboard", {
         category = "none",
@@ -354,30 +403,17 @@ function VocabDeck:onDictButtonsReady(dict_popup, dict_buttons)
     local dictionary = self.ui and self.ui.dictionary
     if dictionary and self._dict_buttons_registered_on == dictionary then return end
     if not dict_popup or type(dict_buttons) ~= "table" then return end
-    local row = {
-        {
-            id = "vocabdeck_add",
-            text = _("Add to VD"),
-            font_bold = true,
+    local row = {}
+    for _, spec in ipairs(buildDictionaryButtonSpecs(self)) do
+        row[#row + 1] = {
+            id = spec.id,
+            text = spec.text,
+            font_bold = spec.font_bold,
             callback = function()
-                self:addFromDictionary(dict_popup)
+                spec.callback(dict_popup)
             end,
-        },
-        {
-            id = "vocabdeck_add_ai",
-            text = _("VD +AI"),
-            callback = function()
-                self:addWithAIFromDictionary(dict_popup)
-            end,
-        },
-        {
-            id = "vocabdeck_define",
-            text = _("Define (VD)"),
-            callback = function()
-                self:defineFromDictionary(dict_popup)
-            end,
-        },
-    }
+        }
+    end
     local insert_index = #dict_buttons > 1 and 2 or 1
     table.insert(dict_buttons, insert_index, row)
 end
