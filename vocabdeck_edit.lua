@@ -200,12 +200,14 @@ end
 
 function VocabDeckCardList:_buildLanguageTabs()
     local languages = DB.listLanguages()
-    if #languages <= 1 then
-        self.language_tabs = nil
-        self.tab_bar_height = 0
-        return
+    local has_active = false
+    for _, language in ipairs(languages) do
+        if language == self.active_language then
+            has_active = true
+            break
+        end
     end
-    if not self.active_language then
+    if not has_active then
         local current = DB.getActiveLanguage()
         local has_current = false
         for _, language in ipairs(languages) do
@@ -216,6 +218,11 @@ function VocabDeckCardList:_buildLanguageTabs()
         end
         self.active_language = has_current and current or languages[1]
         DB.setLanguage(self.active_language)
+    end
+    if #languages <= 1 then
+        self.language_tabs = nil
+        self.tab_bar_height = 0
+        return
     end
     local tab_group = HorizontalGroup:new{}
     local tab_height = Screen:scaleBySize(28)
@@ -338,7 +345,22 @@ function VocabDeckCardList:init()
 
     self.page_info = HorizontalGroup:new{}
     self:refreshFooter()
+    self:_buildFooterWidget()
 
+    self:setupItemHeight()
+    self.item_table = self:loadItems()
+    self.main_content = VerticalGroup:new{}
+    self:_populateItems()
+
+    local frame_children = VerticalGroup:new{}
+    table.insert(frame_children, self.title_bar)
+    table.insert(frame_children, self.main_content)
+    self.frame_children = frame_children  -- store for tab switching
+
+    self:_buildFrame()
+end
+
+function VocabDeckCardList:_buildFooterWidget()
     local bottom_line = LineWidget:new{
         dimen = Geom:new{ w = self.item_width, h = Size.line.thick },
         background = Blitbuffer.COLOR_LIGHT_GRAY,
@@ -354,18 +376,6 @@ function VocabDeckCardList:init()
         dimen = self.dimen:copy(),
         footer_children,
     }
-
-    self:setupItemHeight()
-    self.item_table = self:loadItems()
-    self.main_content = VerticalGroup:new{}
-    self:_populateItems()
-
-    local frame_children = VerticalGroup:new{}
-    table.insert(frame_children, self.title_bar)
-    table.insert(frame_children, self.main_content)
-    self.frame_children = frame_children  -- store for tab switching
-
-    self:_buildFrame()
 end
 
 function VocabDeckCardList:_buildFrame()
@@ -594,10 +604,20 @@ function VocabDeckCardList:onHold(arg, ges)
     return false
 end
 
+-- Full reload after a card add/delete/move: re-check which languages still
+-- have cards (a deck emptied by this action should drop out of the tab bar
+-- immediately, not just the next time the screen is opened).
 function VocabDeckCardList:reloadItems()
+    if not self.book_id then
+        self:_buildLanguageTabs()
+        self:_buildFooterWidget()
+    end
     self:setupItemHeight()
     self.item_table = self:loadItems()
     self:_populateItems()
+    if not self.book_id then
+        self:_buildFrame()
+    end
 end
 
 function VocabDeckCardList:nextPage()
