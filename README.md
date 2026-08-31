@@ -11,9 +11,11 @@ quiet, fast, and close to KOReader's native menus.
 VocabDeck is inspired by and derived from
 [smartdeck.koplugin](https://github.com/yupmoon/smartdeck.koplugin).
 
+See [CHANGELOG.md](CHANGELOG.md) for release history.
+
 ## Features
 
-- **Save words as you read** — tap **Add to VD**, **VD +AI**, or **Define (VD)** in the dictionary popup, or use the highlight menu. To use one combined **VD Definition** button instead, enable **Settings > Unified dictionary button**. Online, it fetches an AI meaning, pronunciation, word type, and more before saving; offline, it saves the current lookup or selection directly. Each card keeps the word, its sentence, surrounding context, book title, and when you added it.
+- **Save words as you read** — tap **Add to VD**, **VD +AI**, or **Define (VD)** in the dictionary popup, or use the highlight menu. To use one combined **VD Definition** button, enable **Settings > Unified dictionary button**. It is disabled by default. Online, it fetches an AI meaning, pronunciation, word type, and more before saving; offline, it saves the current lookup or selection directly. Each card keeps the word, its sentence, surrounding context, book title, and when you added it.
 - **Add cards manually** — open the main menu and pick **Add new card** to type in a word or phrase yourself.
 - **Browse and manage everything** — open **All cards** or **Cards for this book**. Tap any row to view details, edit fields, refetch AI data, mark as known, check memory stats, or delete.
 - **Search and filter** — search by text, filter by word type or source language, or show only flagged cards. Sort by any field and switch to quick deletion mode when you need to clean up.
@@ -28,7 +30,7 @@ VocabDeck is inspired by and derived from
 
 ## Installation
 
-1. Download or clone this repository.
+1. Download the latest release package or clone this repository.
 2. Copy the folder named `vocabdeck.koplugin` into KOReader's `plugins`
    directory.
 3. Restart KOReader.
@@ -37,13 +39,13 @@ VocabDeck is inspired by and derived from
 ### KOReader 2026.07 update note
 
 KOReader 2026.07 changed the dictionary-button and archive-extraction APIs used
-by earlier VocabDeck releases. VocabDeck 1.2.4 supports the new KOReader
+by earlier VocabDeck releases. VocabDeck 1.2.5 supports the new KOReader
 2026.07 APIs while retaining compatibility with KOReader 2026.03.
 
 If you are already running KOReader 2026.07 with a VocabDeck version older
 than 1.2.3, **Check for updates cannot repair that installation** because the
 installed updater still calls the archive API removed by KOReader. Install
-VocabDeck 1.2.4 manually once, then restart KOReader. Future updates can use
+VocabDeck 1.2.5 manually once, then restart KOReader. Future updates can use
 **Check for updates** normally.
 
 Before manually replacing the plugin folder, keep copies of
@@ -54,7 +56,7 @@ separately and are not part of the release ZIP.
 
 Users staying on KOReader 2026.03 do not need this one-time recovery. Existing
 VocabDeck 1.2.3 installations already contain the repaired updater and can
-update to 1.2.4 normally.
+update to 1.2.5 normally.
 
 
 ## Quick Start
@@ -246,8 +248,8 @@ From there you can:
 - Back up the current VocabDeck database.
 - Restore the latest VocabDeck backup.
 
-VocabDeck stores its card database in KOReader's data directory under
-`vocabdeck/vocabdeck.sqlite3`.
+VocabDeck stores its card databases in KOReader's data directory under
+`vocabdeck/`.
 
 ## Privacy
 

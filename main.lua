@@ -29,7 +29,7 @@ local Grammar = require("vocabdeck_grammar")
 local StudyEntry = require("vocabdeck_study_entry")
 
 local SETTINGS_FILE = DataStorage:getSettingsDir() .. "/vocabdeck.lua"
-local PLUGIN_VERSION = "1.2.4"
+local PLUGIN_VERSION = "1.2.5"
 local DICT_BUTTON_ROW_GROUP = "vocabdeck_actions"
 -- IDs used by the row guard for the legacy three-button mode.
 local DICT_BUTTON_IDS = {
